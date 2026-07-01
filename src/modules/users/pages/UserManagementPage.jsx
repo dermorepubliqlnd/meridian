@@ -195,7 +195,7 @@ export default function UserManagementPage() {
   if (!isAdmin) {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-navy mb-1">User Management</h2>
+        <h2 className="text-2xl font-bold font-heading text-navy mb-1">User Management</h2>
         <p className="text-sm text-gray-500">Only Admins can manage users.</p>
       </div>
     );
@@ -203,7 +203,7 @@ export default function UserManagementPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-navy mb-1">User Management</h2>
+      <h2 className="text-2xl font-bold font-heading text-navy mb-1">User Management</h2>
       <p className="text-sm text-gray-500 mb-6">
         Add team members, assign their job title, reporting line, and system role. Click a row's
         Edit button to update it. Meridian is invite-only — there is no public sign-up.

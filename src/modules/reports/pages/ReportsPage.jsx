@@ -1,7 +1,7 @@
 export default function ReportsPage() {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-navy mb-1">Reports</h2>
+      <h2 className="text-2xl font-bold font-heading text-navy mb-1">Reports</h2>
       <p className="text-sm text-gray-500 mb-6">
         Module 4 — Leadership dashboard: active projects, health, overdue count, team bandwidth.
       </p>

@@ -1,7 +1,7 @@
 export default function Dashboard() {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-navy mb-1">Dashboard</h2>
+      <h2 className="text-2xl font-bold font-heading text-navy mb-1">Dashboard</h2>
       <p className="text-sm text-gray-500 mb-6">Welcome to Meridian.</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {["Active Projects", "Overdue Tasks", "Team Bandwidth"].map((label) => (

@@ -6,6 +6,7 @@ import {
   OAuthProvider,
 } from "firebase/auth";
 import { auth } from "../lib/firebase";
+import GlobeMark from "../components/GlobeMark";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -39,8 +40,11 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-navy">
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-navy mb-1">Meridian</h1>
-        <p className="text-sm text-gray-500 mb-6">L&D Project Management</p>
+        <div className="flex items-center gap-3 mb-1">
+          <GlobeMark size={36} />
+          <h1 className="text-2xl font-bold font-heading text-navy">Meridian</h1>
+        </div>
+        <p className="text-sm text-teal-700 font-medium mb-6">True north.</p>
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <input

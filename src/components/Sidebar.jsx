@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import GlobeMark from "./GlobeMark";
 
 const links = [
   { to: "/", label: "Dashboard", end: true },
@@ -14,9 +15,12 @@ export default function Sidebar() {
 
   return (
     <aside className="w-60 bg-navy text-white min-h-screen flex flex-col">
-      <div className="px-6 py-5 border-b border-white/10">
-        <h1 className="text-xl font-bold">Meridian</h1>
-        <p className="text-xs text-white/60">L&D Project Management</p>
+      <div className="px-6 py-5 border-b border-white/10 flex items-center gap-3">
+        <GlobeMark size={32} />
+        <div>
+          <h1 className="text-xl font-bold font-heading">Meridian</h1>
+          <p className="text-xs text-teal-light">True north.</p>
+        </div>
       </div>
       <nav className="flex-1 px-3 py-4 space-y-1">
         {links.map((l) => (
@@ -25,7 +29,7 @@ export default function Sidebar() {
             to={l.to}
             end={l.end}
             className={({ isActive }) =>
-              `block px-3 py-2 rounded-md text-sm font-medium transition ${
+              `block px-3 py-2 rounded-md text-sm font-medium font-heading transition ${
                 isActive ? "bg-teal text-navy" : "text-white/80 hover:bg-white/10"
               }`
             }
@@ -37,7 +41,7 @@ export default function Sidebar() {
           <NavLink
             to="/users"
             className={({ isActive }) =>
-              `block px-3 py-2 rounded-md text-sm font-medium transition ${
+              `block px-3 py-2 rounded-md text-sm font-medium font-heading transition ${
                 isActive ? "bg-teal text-navy" : "text-white/80 hover:bg-white/10"
               }`
             }
