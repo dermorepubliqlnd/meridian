@@ -260,6 +260,19 @@ export default function ProjectDetailPage() {
     return () => { unsubProject(); unsubTasks(); unsubUsers(); };
   }, [id]);
 
+  // Guard placed immediately after data-loading effects, before ANY other
+  // computation in this component. Root cause of the "blank page after
+  // creating a project" bug: several consts below (e.g. effectiveLockedEnd)
+  // read `project.xxx` directly with no optional chaining, and ran on every
+  // render -- including the very first render, when `project` is still null
+  // because Firestore's onSnapshot hasn't delivered data yet. That threw an
+  // uncaught TypeError with no error boundary in the tree, which unmounted
+  // the whole app (not just this page) -- hence blank screen AND a dead
+  // browser back button, since navigating back just re-renders the same
+  // crash. Putting the guard here, before any project-dependent const, closes
+  // off this entire class of bug for good.
+  if (!project) return <p className="text-[13px] text-gray-400 p-4">Loading project...</p>;
+
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
   const members = users.filter((u) => project?.memberIds?.includes(u.id));
   const isApprover = project?.approverId === user?.uid;
@@ -510,7 +523,6 @@ export default function ProjectDetailPage() {
     setRevisedRejectComment("");
   };
 
-  if (!project) return <p className="text-[13px] text-gray-400">Loading project...</p>;
 
   const phaseOrder = [];
   topLevelTasks.forEach((t) => { if (!phaseOrder.includes(t.phase)) phaseOrder.push(t.phase); });
