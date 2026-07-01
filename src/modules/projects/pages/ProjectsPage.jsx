@@ -37,46 +37,46 @@ export default function ProjectsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-2xl font-bold font-heading text-navy">Projects</h2>
+        <h2 className="text-xl font-bold font-heading text-navy">Projects</h2>
         <Link
           to="/projects/new"
-          className="bg-navy text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-navy-light transition"
+          className="bg-navy text-white text-sm font-medium px-3 py-1.5 rounded-md hover:bg-navy-light transition"
         >
           + New Project
         </Link>
       </div>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-xs text-gray-500 mb-4">
         WBS templates, 3-date deadline system, invite-only visibility.
       </p>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs text-gray-400 uppercase">
+        <table className="w-full text-[13px]">
+          <thead className="bg-slate-50 text-left text-[10px] text-gray-400 uppercase tracking-wide font-medium">
             <tr>
-              <th className="px-4 py-3">Project</th>
-              <th className="px-4 py-3">Owner</th>
-              <th className="px-4 py-3">Baseline End</th>
-              <th className="px-4 py-3">Status</th>
+              <th className="px-3 py-2">Project</th>
+              <th className="px-3 py-2">Owner</th>
+              <th className="px-3 py-2">Baseline End</th>
+              <th className="px-3 py-2">Status</th>
             </tr>
           </thead>
           <tbody>
             {projects.map((p) => (
               <tr key={p.id} className="border-t border-gray-100 hover:bg-slate-50">
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   <Link to={`/projects/${p.id}`} className="text-navy font-medium hover:underline">
                     {p.name}
                   </Link>
                   <div className="text-xs text-gray-400">{p.templateName}</div>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{nameFor(p.ownerId)}</td>
-                <td className="px-4 py-3 text-gray-600">
+                <td className="px-3 py-2 text-gray-600">{nameFor(p.ownerId)}</td>
+                <td className="px-3 py-2 text-gray-600">
                   {p.approvedRevisedEndDate || p.baselineEndDate}
                   {p.approvedRevisedEndDate && (
                     <span className="text-xs text-amber-600 ml-1">(revised)</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-medium">
+                <td className="px-3 py-2">
+                  <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px] font-medium">
                     {p.status}
                   </span>
                 </td>

@@ -42,7 +42,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
 
   return (
     <tr className="border-t border-gray-100 bg-slate-50">
-      <td className="px-4 py-3">
+      <td className="px-3 py-2">
         <input
           value={edit.name}
           onChange={(e) => setEdit({ ...edit, name: e.target.value })}
@@ -50,7 +50,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
         />
         <div className="text-xs text-gray-400 mt-1">{user.email}</div>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2">
         <select
           value={edit.jobTitle}
           onChange={(e) => setEdit({ ...edit, jobTitle: e.target.value })}
@@ -64,7 +64,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
           ))}
         </select>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2">
         <select
           value={edit.reportsTo}
           onChange={(e) => setEdit({ ...edit, reportsTo: e.target.value })}
@@ -80,7 +80,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
             ))}
         </select>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2">
         <select
           value={edit.role}
           onChange={(e) => setEdit({ ...edit, role: e.target.value })}
@@ -93,7 +93,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
           ))}
         </select>
       </td>
-      <td className="px-4 py-3 whitespace-nowrap">
+      <td className="px-3 py-2 whitespace-nowrap">
         <button
           onClick={save}
           disabled={saving}
@@ -195,7 +195,7 @@ export default function UserManagementPage() {
   if (!isAdmin) {
     return (
       <div>
-        <h2 className="text-2xl font-bold font-heading text-navy mb-1">User Management</h2>
+        <h2 className="text-xl font-bold font-heading text-navy mb-0.5">User Management</h2>
         <p className="text-sm text-gray-500">Only Admins can manage users.</p>
       </div>
     );
@@ -203,16 +203,16 @@ export default function UserManagementPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold font-heading text-navy mb-1">User Management</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <h2 className="text-xl font-bold font-heading text-navy mb-0.5">User Management</h2>
+      <p className="text-xs text-gray-500 mb-4">
         Add team members, assign their job title, reporting line, and system role. Click a row's
         Edit button to update it. Meridian is invite-only — there is no public sign-up.
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <form
           onSubmit={handleSubmit}
-          className="bg-white rounded-lg shadow-sm border border-gray-100 p-5 space-y-3 lg:col-span-1 h-fit"
+          className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 space-y-2.5 lg:col-span-1 h-fit"
         >
           <h3 className="font-semibold text-navy text-sm mb-2">Add User</h3>
           <input
@@ -317,14 +317,14 @@ export default function UserManagementPage() {
         </form>
 
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs text-gray-400 uppercase">
+          <table className="w-full text-[13px]">
+            <thead className="bg-slate-50 text-left text-[10px] text-gray-400 uppercase tracking-wide font-medium">
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Job Title</th>
-                <th className="px-4 py-3">Reports To</th>
-                <th className="px-4 py-3">System Role</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Job Title</th>
+                <th className="px-3 py-2">Reports To</th>
+                <th className="px-3 py-2">System Role</th>
+                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -339,21 +339,21 @@ export default function UserManagementPage() {
                     onSaved={() => setEditingId(null)}
                   />
                 ) : (
-                  <tr key={u.id} className="border-t border-gray-100">
-                    <td className="px-4 py-3">
+                  <tr key={u.id} className="border-t border-gray-100 hover:bg-slate-50/50">
+                    <td className="px-3 py-2">
                       <div>{u.name}</div>
                       <div className="text-xs text-gray-400">{u.email}</div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{u.jobTitle || "—"}</td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-3 py-2 text-gray-600">{u.jobTitle || "—"}</td>
+                    <td className="px-3 py-2 text-gray-600">
                       {u.reportsTo ? nameFor(u.reportsTo) : "—"}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="bg-teal/10 text-teal-700 px-2 py-1 rounded text-xs font-medium">
+                    <td className="px-3 py-2">
+                      <span className="bg-teal/10 text-teal-700 px-1.5 py-0.5 rounded text-[11px] font-medium">
                         {u.role}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <button
                         onClick={() => setEditingId(u.id)}
                         className="text-xs text-navy underline"

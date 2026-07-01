@@ -42,9 +42,9 @@ export default function Login() {
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
         <div className="flex items-center gap-3 mb-1">
           <GlobeMark size={36} />
-          <h1 className="text-2xl font-bold font-heading text-navy">Meridian</h1>
+          <h1 className="text-xl font-bold font-heading text-navy">Meridian</h1>
         </div>
-        <p className="text-sm text-teal-700 font-medium mb-6">True north.</p>
+        <p className="text-sm text-teal-700 font-medium mb-4">True north.</p>
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <input

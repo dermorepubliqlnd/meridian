@@ -33,12 +33,12 @@ function EditTaskRow({ task, members, onCancel, onSaved }) {
 
   return (
     <tr className="border-t border-gray-100 bg-slate-50">
-      <td className="px-4 py-2">
+      <td className="px-3 py-1.5">
         <div className="text-navy">{task.name}</div>
         <div className="text-xs text-gray-400">{task.notes}</div>
       </td>
-      <td className="px-4 py-2 text-gray-600">{task.responsibleRole}</td>
-      <td className="px-4 py-2">
+      <td className="px-3 py-1.5 text-gray-600">{task.responsibleRole}</td>
+      <td className="px-3 py-1.5">
         <select
           value={edit.assigneeId}
           onChange={(e) => setEdit({ ...edit, assigneeId: e.target.value })}
@@ -52,7 +52,7 @@ function EditTaskRow({ task, members, onCancel, onSaved }) {
           ))}
         </select>
       </td>
-      <td className="px-4 py-2">
+      <td className="px-3 py-1.5">
         <input
           type="number"
           min="0"
@@ -63,8 +63,8 @@ function EditTaskRow({ task, members, onCancel, onSaved }) {
           className="w-20 border border-gray-300 rounded-md px-2 py-1 text-xs"
         />
       </td>
-      <td className="px-4 py-2 text-xs text-gray-400">auto</td>
-      <td className="px-4 py-2">
+      <td className="px-3 py-1.5 text-xs text-gray-400">auto</td>
+      <td className="px-3 py-1.5">
         <select
           value={edit.status}
           onChange={(e) => setEdit({ ...edit, status: e.target.value })}
@@ -77,7 +77,7 @@ function EditTaskRow({ task, members, onCancel, onSaved }) {
           ))}
         </select>
       </td>
-      <td className="px-4 py-2 whitespace-nowrap">
+      <td className="px-3 py-1.5 whitespace-nowrap">
         <button
           onClick={save}
           disabled={saving}
@@ -152,7 +152,7 @@ export default function ProjectDetailPage() {
       </Link>
       <div className="flex items-start justify-between mt-2 mb-1">
         <div>
-          <h2 className="text-2xl font-bold font-heading text-navy">{project.name}</h2>
+          <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
           <p className="text-sm text-gray-500">{project.description}</p>
         </div>
         {project.folderUrl && (
@@ -167,23 +167,23 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-          <div className="text-xs text-gray-400 uppercase">Owner</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-4">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Owner</div>
           <div className="text-sm font-medium text-navy mt-1">{nameFor(project.ownerId)}</div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-          <div className="text-xs text-gray-400 uppercase">Baseline End</div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Baseline End</div>
           <div className="text-sm font-medium text-navy mt-1">{project.baselineEndDate}</div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-          <div className="text-xs text-gray-400 uppercase">Approved Revised End</div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Approved Revised End</div>
           <div className="text-sm font-medium text-navy mt-1">
             {project.approvedRevisedEndDate || "—"}
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-          <div className="text-xs text-gray-400 uppercase">Actual Completion</div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Actual Completion</div>
           <div className="text-sm font-medium text-navy mt-1">
             {project.actualCompletionDate || "—"}
           </div>
@@ -191,8 +191,8 @@ export default function ProjectDetailPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-navy font-heading">
+        <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-navy font-heading">
             Task List — {project.templateName}
           </h3>
           <span className="text-xs text-gray-400">
@@ -200,16 +200,16 @@ export default function ProjectDetailPage() {
             awareness comes with People &amp; Resources)
           </span>
         </div>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs text-gray-400 uppercase">
+        <table className="w-full text-[13px]">
+          <thead className="bg-slate-50 text-left text-[10px] text-gray-400 uppercase tracking-wide font-medium">
             <tr>
-              <th className="px-4 py-2">Task</th>
-              <th className="px-4 py-2">Role</th>
-              <th className="px-4 py-2">Assignee</th>
-              <th className="px-4 py-2">Est. Hours</th>
-              <th className="px-4 py-2">Dates</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2"></th>
+              <th className="px-3 py-1.5">Task</th>
+              <th className="px-3 py-1.5">Role</th>
+              <th className="px-3 py-1.5">Assignee</th>
+              <th className="px-3 py-1.5">Est. Hours</th>
+              <th className="px-3 py-1.5">Dates</th>
+              <th className="px-3 py-1.5">Status</th>
+              <th className="px-3 py-1.5"></th>
             </tr>
           </thead>
           <tbody>
@@ -220,7 +220,7 @@ export default function ProjectDetailPage() {
                 <Fragment key={t.id}>
                   {showPhase && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-2 bg-slate-50/70 text-xs font-semibold text-navy uppercase">
+                      <td colSpan={7} className="px-3 py-1.5 bg-slate-50/70 text-xs font-semibold text-navy uppercase">
                         {t.phase}
                       </td>
                     </tr>
@@ -233,27 +233,27 @@ export default function ProjectDetailPage() {
                       onSaved={(changes) => saveTask(t.id, changes)}
                     />
                   ) : (
-                    <tr className="border-t border-gray-100">
-                      <td className="px-4 py-2">
+                    <tr className="border-t border-gray-100 hover:bg-slate-50/50">
+                      <td className="px-3 py-1.5">
                         <div className="text-navy">{t.name}</div>
                         <div className="text-xs text-gray-400">{t.notes}</div>
                       </td>
-                      <td className="px-4 py-2 text-gray-600">{t.responsibleRole}</td>
-                      <td className="px-4 py-2 text-gray-600">
+                      <td className="px-3 py-1.5 text-gray-600">{t.responsibleRole}</td>
+                      <td className="px-3 py-1.5 text-gray-600">
                         {t.assigneeId ? nameFor(t.assigneeId) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-gray-600">
+                      <td className="px-3 py-1.5 text-gray-600">
                         {t.estimatedHours ? `${t.estimatedHours}h` : "—"}
                       </td>
-                      <td className="px-4 py-2 text-gray-600 text-xs">
+                      <td className="px-3 py-1.5 text-gray-600 text-xs">
                         {t.startDate && t.dueDate ? `${t.startDate} → ${t.dueDate}` : "—"}
                       </td>
-                      <td className="px-4 py-2">
-                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-medium">
+                      <td className="px-3 py-1.5">
+                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px] font-medium">
                           {t.status}
                         </span>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-1.5">
                         <button
                           onClick={() => setEditingId(t.id)}
                           className="text-xs text-navy underline"

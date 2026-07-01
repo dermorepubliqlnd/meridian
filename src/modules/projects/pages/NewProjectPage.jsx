@@ -116,14 +116,14 @@ export default function NewProjectPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold font-heading text-navy mb-1">New Project</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <h2 className="text-xl font-bold font-heading text-navy mb-0.5">New Project</h2>
+      <p className="text-xs text-gray-500 mb-4">
         Pick a WBS template to auto-generate the task list. The Baseline End Date locks once
         saved — future changes go through the deadline change request process.
       </p>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-100 p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-100 p-4 space-y-3">
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Project Name</label>
             <input
@@ -164,7 +164,7 @@ export default function NewProjectPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3.5">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Start Date</label>
               <input
@@ -202,7 +202,7 @@ export default function NewProjectPage() {
         </div>
 
         <div className="lg:col-span-1 space-y-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-5">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
             <label className="text-xs text-gray-500 mb-1 block">Project Owner</label>
             <select
               value={form.ownerId}
@@ -224,7 +224,7 @@ export default function NewProjectPage() {
             </p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-5">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
             <label className="text-xs text-gray-500 mb-2 block">Team Members (Contributors)</label>
             <div className="space-y-1 max-h-56 overflow-y-auto">
               {users.map((u) => (
