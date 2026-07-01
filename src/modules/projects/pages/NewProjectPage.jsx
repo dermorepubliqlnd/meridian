@@ -137,7 +137,7 @@ export default function NewProjectPage() {
         approverId: form.approverId,
         memberIds: Array.from(new Set([...form.memberIds, form.ownerId, form.approverId])),
         folderUrl: form.folderUrl || null,
-        status: "Not Started",
+        status: "Planning",
         createdBy: user.uid,
         createdAt: serverTimestamp(),
       });

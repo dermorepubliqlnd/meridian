@@ -16,6 +16,7 @@ import { computeSchedule } from "../../../lib/scheduling";
 import { computeRollups } from "../../../lib/completion";
 import { useAuth } from "../../../context/AuthContext";
 import { phaseColor, STATUS_PILL_STYLES } from "../../../lib/taskColors";
+import { computeHealth, PROJECT_STATUS_GROUPS } from "../../../lib/health";
 
 const STATUSES = ["Not Started", "In Progress", "Blocked", "Done"];
 
@@ -267,6 +268,8 @@ export default function ProjectDetailPage() {
   const topLevelTasks = tasks.filter((t) => !t.parentTaskId);
   const { completionByTaskId, phaseCompletion, projectCompletion, childrenByParent } = computeRollups(tasks);
 
+  const health = computeHealth(project, projectCompletion);
+
   const scheduledDueDates = topLevelTasks.filter((t) => t.dueDate).map((t) => t.dueDate);
   const proposedBaseline = scheduledDueDates.length ? scheduledDueDates.sort().at(-1) : null;
 
@@ -513,6 +516,7 @@ export default function ProjectDetailPage() {
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
             <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
             <span className="bg-violet-50 border-l-2 border-violet-300 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">{project.priority}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>{health.label}</span>
           </div>
           <p className="text-xs text-gray-500">{project.description}</p>
         </div>
@@ -530,6 +534,22 @@ export default function ProjectDetailPage() {
           <div className="h-1.5 bg-white rounded-full overflow-hidden mt-1.5">
             <div className="h-full bg-teal rounded-full" style={{ width: `${Math.round(projectCompletion)}%` }} />
           </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-slate-300 p-3">
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Status</div>
+          <select
+            value={project.status || "Planning"}
+            onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
+            className="font-medium text-navy mt-1 bg-transparent border-none p-0 text-[13px] focus:outline-none"
+          >
+            {Object.entries(PROJECT_STATUS_GROUPS).map(([group, options]) => (
+              <optgroup key={group} label={group}>
+                {options.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-blue-300 p-3">
           <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Owner</div>
