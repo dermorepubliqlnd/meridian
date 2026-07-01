@@ -17,7 +17,7 @@ export function computeRollups(tasks) {
     const children = childrenByParent[task.id] || [];
     let result;
     if (children.length === 0) {
-      result = task.status === "Done" ? 100 : 0;
+      result = task.status === "Done" ? 100 : task.status === "In Progress" ? 50 : 0;
     } else {
       let totalWeight = 0;
       let weightedSum = 0;

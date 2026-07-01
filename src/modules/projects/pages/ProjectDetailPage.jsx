@@ -351,8 +351,12 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const [manualBaseline, setManualBaseline] = useState("");
+
   const submitBaseline = async () => {
-    await updateDoc(doc(db, "projects", id), { baselineStatus: "Pending Approval", proposedBaselineEndDate: proposedBaseline });
+    const dateToSubmit = proposedBaseline || manualBaseline;
+    if (!dateToSubmit) return;
+    await updateDoc(doc(db, "projects", id), { baselineStatus: "Pending Approval", proposedBaselineEndDate: dateToSubmit });
   };
   const approveBaseline = async () => {
     await updateDoc(doc(db, "projects", id), { baselineStatus: "Locked", baselineEndDate: project.proposedBaselineEndDate, baselineRejectionComment: null });
@@ -361,6 +365,42 @@ export default function ProjectDetailPage() {
     await updateDoc(doc(db, "projects", id), { baselineStatus: "Rejected", baselineRejectionComment: rejectComment });
     setShowReject(false);
     setRejectComment("");
+  };
+
+  // Post-lock guardrail: if the live computed schedule now runs past the
+  // locked (or last-approved-revised) baseline, flag it -- but never block
+  // adding/editing tasks. Resolving the slip requires a Deadline Change
+  // Request to the Approver; work continues regardless while it's pending.
+  const effectiveLockedEnd = project.approvedRevisedEndDate || project.baselineEndDate;
+  const isSlipping =
+    project.baselineStatus === "Locked" &&
+    proposedBaseline &&
+    effectiveLockedEnd &&
+    proposedBaseline > effectiveLockedEnd &&
+    project.revisedDeadlineStatus !== "Pending Approval";
+
+  const [showRevisedReject, setShowRevisedReject] = useState(false);
+  const [revisedRejectComment, setRevisedRejectComment] = useState("");
+
+  const submitDeadlineChangeRequest = async () => {
+    await updateDoc(doc(db, "projects", id), {
+      revisedDeadlineStatus: "Pending Approval",
+      proposedRevisedEndDate: proposedBaseline,
+    });
+  };
+  const approveDeadlineChange = async () => {
+    await updateDoc(doc(db, "projects", id), {
+      revisedDeadlineStatus: null,
+      approvedRevisedEndDate: project.proposedRevisedEndDate,
+    });
+  };
+  const rejectDeadlineChange = async () => {
+    await updateDoc(doc(db, "projects", id), {
+      revisedDeadlineStatus: "Rejected",
+      revisedDeadlineRejectionComment: revisedRejectComment,
+    });
+    setShowRevisedReject(false);
+    setRevisedRejectComment("");
   };
 
   if (!project) return <p className="text-[13px] text-gray-400">Loading project...</p>;
@@ -381,7 +421,6 @@ export default function ProjectDetailPage() {
           <p className="text-xs text-gray-500">{project.description}</p>
         </div>
         <div className="flex items-center gap-3">
-          <ProgressBar pct={projectCompletion} />
           {project.folderUrl && (
             <a href={project.folderUrl} target="_blank" rel="noreferrer" className="text-[11px] text-teal-700 underline whitespace-nowrap">Project Folder ↗</a>
           )}
@@ -389,6 +428,13 @@ export default function ProjectDetailPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4 text-[13px]">
+        <div className="bg-teal/5 rounded-lg shadow-sm border-2 border-teal/30 p-3">
+          <div className="text-[10px] text-teal-700 uppercase tracking-wide font-semibold">Completion</div>
+          <div className="text-2xl font-bold text-navy mt-1">{Math.round(projectCompletion)}%</div>
+          <div className="h-1.5 bg-white rounded-full overflow-hidden mt-1.5">
+            <div className="h-full bg-teal rounded-full" style={{ width: `${Math.round(projectCompletion)}%` }} />
+          </div>
+        </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-blue-300 p-3">
           <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Owner</div>
           <div className="font-medium text-navy mt-1">{nameFor(project.ownerId)}</div>
@@ -438,13 +484,20 @@ export default function ProjectDetailPage() {
               <div className="text-[13px] text-amber-700">Awaiting approval — proposed date {project.proposedBaselineEndDate}</div>
             ) : project.baselineStatus === "Rejected" ? (
               <div className="text-[13px] text-red-600">Rejected: {project.baselineRejectionComment}</div>
+            ) : proposedBaseline ? (
+              <div className="text-[13px] text-gray-500">Ready to submit — computed end date {proposedBaseline}</div>
             ) : (
-              <div className="text-[13px] text-gray-500">{proposedBaseline ? `Ready to submit — computed end date ${proposedBaseline}` : "Add hours to tasks below to compute a proposed end date"}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-gray-500">No tasks have hours yet — set a target manually, or add hours below to auto-compute one:</span>
+                <input type="date" value={manualBaseline} onChange={(e) => setManualBaseline(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1 text-[11px]" />
+              </div>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {isOwner && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && proposedBaseline && (
-              <button onClick={submitBaseline} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded-md">Submit Baseline for Approval</button>
+            {isOwner && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
+              <button onClick={submitBaseline} disabled={!proposedBaseline && !manualBaseline} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded-md disabled:opacity-40">
+                Submit Baseline for Approval
+              </button>
             )}
             {isApprover && project.baselineStatus === "Pending Approval" && !showReject && (
               <>
@@ -461,6 +514,49 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {isSlipping && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="text-[13px] text-amber-800">
+              Current task hours now compute an end date of <strong>{proposedBaseline}</strong>, past the locked baseline of{" "}
+              <strong>{effectiveLockedEnd}</strong>. Work isn't blocked — but the deadline needs a formal revision to stay accurate.
+            </div>
+            {isOwner && (
+              <button onClick={submitDeadlineChangeRequest} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded-md whitespace-nowrap ml-3">
+                Request Deadline Change
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {project.revisedDeadlineStatus === "Pending Approval" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="text-[13px] text-amber-800">
+              Deadline change requested: revise to <strong>{project.proposedRevisedEndDate}</strong>
+            </div>
+            {isApprover && !showRevisedReject && (
+              <div className="flex gap-2">
+                <button onClick={approveDeadlineChange} className="text-[11px] bg-teal text-navy font-medium px-3 py-1.5 rounded-md">Approve</button>
+                <button onClick={() => setShowRevisedReject(true)} className="text-[11px] border border-gray-300 px-3 py-1.5 rounded-md text-gray-600">Reject</button>
+              </div>
+            )}
+          </div>
+          {showRevisedReject && (
+            <div className="mt-3 flex gap-2">
+              <input placeholder="Reason for rejection" value={revisedRejectComment} onChange={(e) => setRevisedRejectComment(e.target.value)} className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-[11px]" />
+              <button onClick={rejectDeadlineChange} className="text-[11px] bg-red-500 text-white px-3 py-1.5 rounded-md">Confirm Reject</button>
+            </div>
+          )}
+        </div>
+      )}
+      {project.revisedDeadlineStatus === "Rejected" && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3.5 mb-4 text-[13px] text-red-700">
+          Deadline change rejected: {project.revisedDeadlineRejectionComment}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
