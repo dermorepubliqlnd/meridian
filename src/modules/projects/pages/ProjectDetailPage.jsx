@@ -268,7 +268,7 @@ export default function ProjectDetailPage() {
   const topLevelTasks = tasks.filter((t) => !t.parentTaskId);
   const { completionByTaskId, phaseCompletion, projectCompletion, childrenByParent } = computeRollups(tasks);
 
-  const health = computeHealth(project, projectCompletion);
+  const health = project ? computeHealth(project, projectCompletion) : null;
 
   const scheduledDueDates = topLevelTasks.filter((t) => t.dueDate).map((t) => t.dueDate);
   const proposedBaseline = scheduledDueDates.length ? scheduledDueDates.sort().at(-1) : null;
@@ -458,7 +458,15 @@ export default function ProjectDetailPage() {
     await updateDoc(doc(db, "projects", id), { baselineStatus: "Pending Approval", proposedBaselineEndDate: dateToSubmit });
   };
   const approveBaseline = async () => {
-    await updateDoc(doc(db, "projects", id), { baselineStatus: "Locked", baselineEndDate: project.proposedBaselineEndDate, baselineRejectionComment: null });
+    // Approving the baseline is what graduates a project out of "Scoping" --
+    // per Sandy's direction, status stays Scoping by default until a baseline
+    // is locked, then normal status/health tracking (Planning onward) applies.
+    await updateDoc(doc(db, "projects", id), {
+      baselineStatus: "Locked",
+      baselineEndDate: project.proposedBaselineEndDate,
+      baselineRejectionComment: null,
+      status: project.status === "Scoping" ? "Planning" : project.status,
+    });
   };
   const rejectBaseline = async () => {
     await updateDoc(doc(db, "projects", id), { baselineStatus: "Rejected", baselineRejectionComment: rejectComment });

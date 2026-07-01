@@ -1,5 +1,5 @@
 export const PROJECT_STATUS_GROUPS = {
-  "To-do": ["Backlog", "Queued"],
+  "To-do": ["Scoping", "Backlog", "Queued"],
   "In Progress": ["Planning", "Design", "Development", "Delivery", "Evaluation", "Paused"],
   Complete: ["Done", "Canceled", "Merged"],
 };
@@ -9,7 +9,7 @@ export const PROJECT_STATUSES = Object.values(PROJECT_STATUS_GROUPS).flat();
 const TODO_STATUSES = PROJECT_STATUS_GROUPS["To-do"];
 
 export function computeHealth(project, completionPct) {
-  const status = project.status || "Planning";
+  const status = project.status || "Scoping";
   const start = project.startDate ? new Date(project.startDate) : null;
   // Deadline used for adherence math: approved revision > locked baseline > live proposed
   // baseline (max task due date) — so health stays meaningful even before a baseline is locked.
@@ -30,6 +30,13 @@ export function computeHealth(project, completionPct) {
     return { label: "Done", style: "bg-emerald-100 text-emerald-700" };
   }
   if (status === "Paused") return { label: "Paused", style: "bg-gray-100 text-gray-600" };
+
+  // --- Scoping: the default status at project creation. No baseline has been
+  // locked yet, so there is nothing to measure schedule adherence against.
+  // A project stays here on purpose until its baseline is approved — at which
+  // point approveBaseline() auto-advances status to "Planning" and the normal
+  // status/health rules below start applying. ---
+  if (status === "Scoping") return { label: "Scoping", style: "bg-gray-100 text-gray-500" };
 
   // --- Data-integrity flag: work has started but status was never moved off the backlog. ---
   if (completionPct > 0 && TODO_STATUSES.includes(status)) {
