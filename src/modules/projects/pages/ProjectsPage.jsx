@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
+import { STATUS_STYLES } from "../../../lib/taskColors";
 
 export default function ProjectsPage() {
   const { user, profile } = useAuth();
@@ -77,7 +78,7 @@ export default function ProjectsPage() {
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px] font-medium">
+                  <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium border-l-2 ${STATUS_STYLES[p.status] || STATUS_STYLES["Not Started"]}`}>
                     {p.status}
                   </span>
                 </td>
