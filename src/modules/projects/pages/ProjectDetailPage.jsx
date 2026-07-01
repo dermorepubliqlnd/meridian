@@ -1,13 +1,104 @@
 import { useEffect, useState, Fragment } from "react";
 import { useParams, Link } from "react-router-dom";
-import { doc, onSnapshot, collection, query, orderBy } from "firebase/firestore";
+import {
+  doc,
+  onSnapshot,
+  collection,
+  query,
+  orderBy,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { computeSchedule } from "../../../lib/scheduling";
+
+const STATUSES = ["Not Started", "In Progress", "Blocked", "Done"];
+
+function EditTaskRow({ task, members, onCancel, onSaved }) {
+  const [edit, setEdit] = useState({
+    assigneeId: task.assigneeId || "",
+    estimatedHours: task.estimatedHours || "",
+    status: task.status || "Not Started",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    await onSaved({
+      assigneeId: edit.assigneeId || null,
+      estimatedHours: edit.estimatedHours ? Number(edit.estimatedHours) : null,
+      status: edit.status,
+    });
+    setSaving(false);
+  };
+
+  return (
+    <tr className="border-t border-gray-100 bg-slate-50">
+      <td className="px-4 py-2">
+        <div className="text-navy">{task.name}</div>
+        <div className="text-xs text-gray-400">{task.notes}</div>
+      </td>
+      <td className="px-4 py-2 text-gray-600">{task.responsibleRole}</td>
+      <td className="px-4 py-2">
+        <select
+          value={edit.assigneeId}
+          onChange={(e) => setEdit({ ...edit, assigneeId: e.target.value })}
+          className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+        >
+          <option value="">Unassigned</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-2">
+        <input
+          type="number"
+          min="0"
+          step="0.5"
+          value={edit.estimatedHours}
+          onChange={(e) => setEdit({ ...edit, estimatedHours: e.target.value })}
+          placeholder="hrs"
+          className="w-20 border border-gray-300 rounded-md px-2 py-1 text-xs"
+        />
+      </td>
+      <td className="px-4 py-2 text-xs text-gray-400">auto</td>
+      <td className="px-4 py-2">
+        <select
+          value={edit.status}
+          onChange={(e) => setEdit({ ...edit, status: e.target.value })}
+          className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+        >
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-2 whitespace-nowrap">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="text-xs bg-navy text-white px-2 py-1 rounded-md mr-2 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onCancel} className="text-xs text-gray-500">
+          Cancel
+        </button>
+      </td>
+    </tr>
+  );
+}
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     const unsubProject = onSnapshot(doc(db, "projects", id), (snap) => {
@@ -28,6 +119,25 @@ export default function ProjectDetailPage() {
   }, [id]);
 
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
+  const members = users.filter((u) => project?.memberIds?.includes(u.id));
+
+  const saveTask = async (taskId, changes) => {
+    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, ...changes } : t));
+    const scheduled = computeSchedule(updatedTasks, project.startDate);
+
+    const batch = writeBatch(db);
+    scheduled.forEach((t) => {
+      batch.update(doc(db, "projects", id, "tasks", t.id), {
+        assigneeId: t.assigneeId,
+        estimatedHours: t.estimatedHours,
+        status: t.status,
+        startDate: t.startDate,
+        dueDate: t.dueDate,
+      });
+    });
+    await batch.commit();
+    setEditingId(null);
+  };
 
   if (!project) {
     return <p className="text-sm text-gray-400">Loading project...</p>;
@@ -86,16 +196,20 @@ export default function ProjectDetailPage() {
             Task List — {project.templateName}
           </h3>
           <span className="text-xs text-gray-400">
-            Hours + auto-scheduled dates come in the Tasks module next
+            Dates auto-calculate from hours (8 hrs/day, weekdays only — holiday/time-off
+            awareness comes with People &amp; Resources)
           </span>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-gray-400 uppercase">
             <tr>
               <th className="px-4 py-2">Task</th>
-              <th className="px-4 py-2">Responsible Role</th>
-              <th className="px-4 py-2">Est. Days</th>
+              <th className="px-4 py-2">Role</th>
+              <th className="px-4 py-2">Assignee</th>
+              <th className="px-4 py-2">Est. Hours</th>
+              <th className="px-4 py-2">Dates</th>
               <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -105,25 +219,50 @@ export default function ProjectDetailPage() {
               return (
                 <Fragment key={t.id}>
                   {showPhase && (
-                    <tr key={t.phase} className="bg-slate-50/70">
-                      <td colSpan={4} className="px-4 py-2 text-xs font-semibold text-navy uppercase">
+                    <tr>
+                      <td colSpan={7} className="px-4 py-2 bg-slate-50/70 text-xs font-semibold text-navy uppercase">
                         {t.phase}
                       </td>
                     </tr>
                   )}
-                  <tr key={t.id} className="border-t border-gray-100">
-                    <td className="px-4 py-2">
-                      <div className="text-navy">{t.name}</div>
-                      <div className="text-xs text-gray-400">{t.notes}</div>
-                    </td>
-                    <td className="px-4 py-2 text-gray-600">{t.responsibleRole}</td>
-                    <td className="px-4 py-2 text-gray-600">{t.estimatedDays}</td>
-                    <td className="px-4 py-2">
-                      <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-medium">
-                        {t.status}
-                      </span>
-                    </td>
-                  </tr>
+                  {editingId === t.id ? (
+                    <EditTaskRow
+                      task={t}
+                      members={members}
+                      onCancel={() => setEditingId(null)}
+                      onSaved={(changes) => saveTask(t.id, changes)}
+                    />
+                  ) : (
+                    <tr className="border-t border-gray-100">
+                      <td className="px-4 py-2">
+                        <div className="text-navy">{t.name}</div>
+                        <div className="text-xs text-gray-400">{t.notes}</div>
+                      </td>
+                      <td className="px-4 py-2 text-gray-600">{t.responsibleRole}</td>
+                      <td className="px-4 py-2 text-gray-600">
+                        {t.assigneeId ? nameFor(t.assigneeId) : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-gray-600">
+                        {t.estimatedHours ? `${t.estimatedHours}h` : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-gray-600 text-xs">
+                        {t.startDate && t.dueDate ? `${t.startDate} → ${t.dueDate}` : "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-medium">
+                          {t.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => setEditingId(t.id)}
+                          className="text-xs text-navy underline"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                 </Fragment>
               );
             })}
