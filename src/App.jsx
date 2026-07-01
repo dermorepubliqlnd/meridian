@@ -7,6 +7,7 @@ import ProjectsPage from "./modules/projects/pages/ProjectsPage";
 import TasksPage from "./modules/tasks/pages/TasksPage";
 import ResourcesPage from "./modules/resources/pages/ResourcesPage";
 import ReportsPage from "./modules/reports/pages/ReportsPage";
+import UserManagementPage from "./modules/users/pages/UserManagementPage";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="users" element={<UserManagementPage />} />
       </Route>
     </Routes>
   );
