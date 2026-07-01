@@ -3,7 +3,7 @@ import { collection, onSnapshot, doc, setDoc, serverTimestamp } from "firebase/f
 import { db, createUserWithoutSignIn } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
 
-const ROLES = ["Admin", "Project Manager", "Project Owner", "Contributor", "Exec Viewer"];
+const ROLES = ["Admin", "Contributor", "Exec Viewer"];
 
 function genTempPassword() {
   return "Md" + Math.random().toString(36).slice(-8) + "!1";
