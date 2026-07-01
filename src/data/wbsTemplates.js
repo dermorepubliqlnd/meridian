@@ -19,8 +19,89 @@ export const BLANK_TEMPLATE = {
   phases: [],
 };
 
+
+// LEAP framework templates — Dermorepubliq's own full-build model.
+// Analysis is shared pre-work; scope determines how many phases follow:
+// L = Learn only, LE = Learn + Engage, LEAP = Learn + Engage + Apply + Prove.
+export const LEAP_ANALYSIS = { phase: "Analysis", tasks: [
+  { name: "Discovery and Project Scope", notes: "Pinpoint latest pain points, relevant KPIs, and performance evaluation methods already in practice", role: "ID / Director" },
+  { name: "Research", notes: "Gather and organize key references for identified course topics", role: "ID" },
+  { name: "Course Outcome and TLO", notes: "Refine course outcome and define TLOs", role: "ID" },
+  { name: "Identify Learning Gap", notes: "Identify learning gap based on identified outcomes and current performance", role: "ID" },
+  { name: "TLO and ELO across LEAP", notes: "Refine Terminal and Enabling Learning Objectives based on identified learning gap", role: "ID" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "Assessment across LEAP", notes: "Plot out key assessment questions and activities", role: "ID" },
+]};
+
+const LEAP_LEARN = { phase: "Learn", tasks: [
+  { name: "Training Design", notes: "Specify activities, module features, and learning materials + specific assessment questions", role: "ID" },
+  { name: "Review, Revisions, Approval", notes: "Present outline of content and activities for review", role: "Director" },
+  { name: "Development Scoping", notes: "Compute time duration for each development phase", role: "ID" },
+  { name: "Storyboarding", notes: "Compose the script, interactive features, etc. (with Content Devs)", role: "ID / Content Dev" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "Alpha Development", notes: "", role: "Content Dev" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "LMS Set-up", notes: "", role: "LMS Admin" },
+  { name: "Pilot Testing and Refinement", notes: "Tested with one department; insights gathered and changes made", role: "ID" },
+  { name: "Announcement", notes: "", role: "Supervisor / ID" },
+  { name: "Course Launch and Implementation", notes: "", role: "LMS Admin / Trainer" },
+  { name: "Monitoring and Reporting", notes: "Regular monitoring and reporting of training compliance", role: "ID / Supervisor" },
+]};
+
+const LEAP_ENGAGE = { phase: "Engage", tasks: [
+  { name: "Training Design", notes: "Specify activities, module features, and learning materials + specific assessment questions", role: "ID" },
+  { name: "Review, Revisions, Approval", notes: "Present outline of content and activities for review", role: "Director" },
+  { name: "Development Scoping", notes: "Compute time duration for each development phase", role: "ID" },
+  { name: "Storyboarding", notes: "Compose the script, interactive features, etc. (with Content Devs)", role: "ID / Content Dev" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "Alpha Development", notes: "", role: "Content Dev" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "Training of Trainers", notes: "Ensure trainers understand objectives, approach, content, materials, activities, and assessments", role: "ID / Trainer" },
+  { name: "E-Phase Implementation", notes: "Indicate modality: ILT, VILT, or AOL", role: "Trainer" },
+  { name: "Level 1: Reaction (SLT)", notes: "Gathering and analysis of post-training surveys", role: "ID / Supervisor" },
+  { name: "Level 2: Learning (SLT)", notes: "Gathering and analysis of summative assessment results", role: "ID / Supervisor" },
+  { name: "Reporting (L1 and L2)", notes: "Finalization of report, and presentation to stakeholders", role: "ID / Supervisor" },
+]};
+
+const LEAP_APPLY = { phase: "Apply", tasks: [
+  { name: "Training Design", notes: "Development of Performance Support Kit and Coaching Toolbox", role: "ID" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "Alpha Development", notes: "", role: "Content Dev" },
+  { name: "Review, Revisions, Approval", notes: "", role: "Director" },
+  { name: "OJT Training (L3 Eval I)", notes: "Guided practice + coaching", role: "Trainer / Supervisor" },
+  { name: "Learning Validation (L3 Eval II)", notes: "Submission / Presentation / Defense", role: "Trainer / Supervisor" },
+  { name: "Certificate and Recognition", notes: "", role: "Supervisor" },
+]};
+
+const LEAP_PROVE = { phase: "Prove", tasks: [
+  { name: "Level 3: Behavior II", notes: "30 days post-training learning assessment", role: "ID / Supervisor" },
+  { name: "Level 3: Behavior III", notes: "60 days post-training learning assessment", role: "ID / Supervisor" },
+  { name: "Level 3: Behavior IV", notes: "90 days post-training learning assessment", role: "ID / Supervisor" },
+  { name: "Level 4: Results", notes: "Identify impact on business and operations 90 days post-training", role: "ID / Director" },
+  { name: "Reporting", notes: "Finalization of report, and presentation to stakeholders", role: "ID / Supervisor" },
+]};
+
+// LEAP is chosen as ONE work type with a phase picker (Learn/Engage/Apply/
+// Prove checkboxes) shown at project setup, rather than separate fixed
+// templates. Analysis is always included as shared pre-work.
+export const LEAP_PHASE_LIBRARY = {
+  Learn: LEAP_LEARN,
+  Engage: LEAP_ENGAGE,
+  Apply: LEAP_APPLY,
+  Prove: LEAP_PROVE,
+};
+
+export const LEAP_FRAMEWORK = {
+  id: "leap-framework",
+  name: "LEAP Framework (choose phases)",
+  description: "Dermorepubliq's full-build model. Pick which phases apply: Learn only, Learn+Engage, or the full Learn/Engage/Apply/Prove build.",
+  isLeap: true,
+  phases: [], // assembled dynamically from LEAP_ANALYSIS + selected LEAP_PHASE_LIBRARY entries
+};
+
 export const WBS_TEMPLATES = [
   BLANK_TEMPLATE,
+  LEAP_FRAMEWORK,
   {
     id: "full-elearning",
     name: "Full E-Learning Development",

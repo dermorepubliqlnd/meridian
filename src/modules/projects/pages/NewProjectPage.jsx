@@ -10,7 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
-import { WBS_TEMPLATES } from "../../../data/wbsTemplates";
+import { WBS_TEMPLATES, LEAP_ANALYSIS, LEAP_PHASE_LIBRARY } from "../../../data/wbsTemplates";
 import {
   PRIORITIES,
   PROJECT_SOURCES,
@@ -61,6 +61,7 @@ export default function NewProjectPage() {
     memberIds: [],
     folderUrl: "",
   });
+  const [leapPhases, setLeapPhases] = useState({ Learn: true, Engage: false, Apply: false, Prove: false });
   const [deliveryTouched, setDeliveryTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -73,7 +74,11 @@ export default function NewProjectPage() {
   }, []);
 
   const selectedTemplate = WBS_TEMPLATES.find((t) => t.id === form.templateId);
-  const totalTasks = selectedTemplate.phases.reduce((n, p) => n + p.tasks.length, 0);
+  const isLeap = selectedTemplate.isLeap;
+  const effectivePhases = isLeap
+    ? [LEAP_ANALYSIS, ...Object.entries(leapPhases).filter(([, on]) => on).map(([name]) => LEAP_PHASE_LIBRARY[name])]
+    : selectedTemplate.phases;
+  const totalTasks = effectivePhases.reduce((n, p) => n + p.tasks.length, 0);
 
   // Smart-fill Delivery Format from Work Type, but only if the user hasn't
   // manually touched that field yet.
@@ -113,7 +118,9 @@ export default function NewProjectPage() {
         requestorDepartment: form.source === "Intake Request" ? form.requestorDepartment : null,
         priority: form.priority,
         templateId: form.templateId,
-        workTypeName: selectedTemplate.name,
+        workTypeName: isLeap
+          ? `LEAP \u2014 ${["Learn", ...Object.entries(leapPhases).filter(([n, on]) => on && n !== "Learn").map(([n]) => n)].join(" + ")}`
+          : selectedTemplate.name,
         trainingType: form.trainingType || null,
         developmentType: form.developmentType,
         deliveryFormat: form.deliveryFormat || null,
@@ -132,22 +139,25 @@ export default function NewProjectPage() {
         createdAt: serverTimestamp(),
       });
 
-      if (selectedTemplate.phases.length > 0) {
+      if (effectivePhases.length > 0) {
         const batch = writeBatch(db);
         let order = 0;
-        selectedTemplate.phases.forEach((phase) => {
+        effectivePhases.forEach((phase) => {
           phase.tasks.forEach((task) => {
             order += 1;
             const taskRef = doc(collection(db, "projects", projectRef.id, "tasks"));
             batch.set(taskRef, {
+              parentTaskId: null,
               phase: phase.phase,
               name: task.name,
               notes: task.notes,
               responsibleRole: task.role,
               assigneeId: null,
               estimatedHours: null,
+              actualHours: null,
               startDate: null,
               dueDate: null,
+              actualCompletionDate: null,
               status: "Not Started",
               blockedBy: [],
               order,
@@ -275,9 +285,23 @@ export default function NewProjectPage() {
               ))}
             </select>
             <p className="text-[11px] text-gray-400 mt-1">{selectedTemplate.description}</p>
+            {isLeap && (
+              <div className="flex gap-3 mt-2 bg-slate-50 rounded-md p-2.5">
+                {["Learn", "Engage", "Apply", "Prove"].map((phaseName) => (
+                  <label key={phaseName} className="flex items-center gap-1.5 text-[12px]">
+                    <input
+                      type="checkbox"
+                      checked={leapPhases[phaseName]}
+                      onChange={(e) => setLeapPhases({ ...leapPhases, [phaseName]: e.target.checked })}
+                    />
+                    {phaseName}
+                  </label>
+                ))}
+              </div>
+            )}
             {totalTasks > 0 && (
               <p className="text-[11px] text-teal-700 mt-1">
-                {totalTasks} tasks across {selectedTemplate.phases.length} phases will be
+                {totalTasks} tasks across {effectivePhases.length} phases will be
                 auto-generated. You can change Work Type later, but it won't regenerate the task
                 list once tasks have progress.
               </p>

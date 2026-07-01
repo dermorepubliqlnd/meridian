@@ -12,56 +12,135 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { computeSchedule } from "../../../lib/scheduling";
+import { computeRollups } from "../../../lib/completion";
 import { useAuth } from "../../../context/AuthContext";
-import { phaseColor, STATUS_STYLES } from "../../../lib/taskColors";
+import { phaseColor, STATUS_PILL_STYLES } from "../../../lib/taskColors";
 
 const STATUSES = ["Not Started", "In Progress", "Blocked", "Done"];
 
-function StatusBadge({ status }) {
+function ProgressBar({ pct }) {
+  const rounded = Math.round(pct);
   return (
-    <span
-      className={`px-1.5 py-0.5 rounded text-[11px] font-medium border-l-2 ${STATUS_STYLES[status] || STATUS_STYLES["Not Started"]}`}
-    >
-      {status}
-    </span>
+    <div className="flex items-center gap-1.5 w-24">
+      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full bg-teal rounded-full" style={{ width: `${rounded}%` }} />
+      </div>
+      <span className="text-[10px] text-gray-400 w-7 text-right">{rounded}%</span>
+    </div>
   );
 }
 
-function SubtaskList({ subtasks, onToggle, onAdd, onRemove }) {
-  const [newSubtask, setNewSubtask] = useState("");
+function TaskRow({ task, depth, members, childrenByParent, completionByTaskId, onCommit, onAddSubtask, expanded, onToggleExpand }) {
+  const children = childrenByParent[task.id] || [];
+  const hasChildren = children.length > 0;
+
   return (
-    <div className="pl-6 pr-3 py-2 bg-slate-50/60">
-      {subtasks.map((s) => (
-        <div key={s.id} className="flex items-center gap-2 py-0.5 text-[12px]">
-          <input type="checkbox" checked={s.done} onChange={() => onToggle(s.id)} />
-          <span className={s.done ? "line-through text-gray-400" : "text-gray-700"}>{s.name}</span>
-          <button onClick={() => onRemove(s.id)} className="text-gray-300 hover:text-red-400 ml-auto text-[11px]">
-            remove
-          </button>
-        </div>
-      ))}
-      <div className="flex gap-2 mt-1">
-        <input
-          value={newSubtask}
-          onChange={(e) => setNewSubtask(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newSubtask.trim()) {
-              onAdd(newSubtask.trim());
-              setNewSubtask("");
-            }
-          }}
-          placeholder="Add subtask, press Enter"
-          className="flex-1 border border-gray-200 rounded-md px-2 py-1 text-[11px] bg-white"
-        />
-      </div>
-    </div>
+    <>
+      <tr className="border-t border-gray-100 hover:bg-slate-50/50 align-top">
+        <td className="px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 20}px` }}>
+          <div className="flex items-start gap-1.5">
+            {hasChildren && (
+              <button onClick={() => onToggleExpand(task.id)} className="text-gray-400 text-[10px] mt-0.5">
+                {expanded ? "▾" : "▸"}
+              </button>
+            )}
+            <div className="flex-1">
+              <div className="text-navy">{task.name}</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                {hasChildren && <ProgressBar pct={completionByTaskId[task.id] || 0} />}
+                <button onClick={() => onAddSubtask(task)} className="text-[10px] text-teal-700">
+                  + subtask
+                </button>
+              </div>
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-1.5">
+          <select
+            value={task.assigneeId || ""}
+            onChange={(e) => onCommit(task, { assigneeId: e.target.value || null })}
+            className="w-full border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
+          >
+            <option value="">Unassigned</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td className="px-3 py-1.5">
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            defaultValue={task.estimatedHours || ""}
+            onBlur={(e) => onCommit(task, { estimatedHours: e.target.value ? Number(e.target.value) : null })}
+            placeholder="—"
+            className="w-16 border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
+          />
+        </td>
+        <td className="px-3 py-1.5">
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            defaultValue={task.actualHours || ""}
+            onBlur={(e) => onCommit(task, { actualHours: e.target.value ? Number(e.target.value) : null })}
+            placeholder="—"
+            className="w-16 border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
+          />
+        </td>
+        <td className="px-3 py-1.5 text-gray-500 text-[11px]">
+          {depth === 0 ? task.startDate || "—" : "—"}
+        </td>
+        <td className="px-3 py-1.5 text-gray-500 text-[11px]">
+          {depth === 0 ? task.dueDate || "—" : "—"}
+        </td>
+        <td className="px-3 py-1.5">
+          <input
+            type="date"
+            defaultValue={task.actualCompletionDate || ""}
+            onChange={(e) => onCommit(task, { actualCompletionDate: e.target.value || null })}
+            className="border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
+          />
+        </td>
+        <td className="px-3 py-1.5">
+          <select
+            value={task.status}
+            onChange={(e) => onCommit(task, { status: e.target.value })}
+            className={`appearance-none cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium border-none focus:outline-none focus:ring-2 focus:ring-teal ${STATUS_PILL_STYLES[task.status] || STATUS_PILL_STYLES["Not Started"]}`}
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </td>
+      </tr>
+      {expanded &&
+        children.map((c) => (
+          <TaskRow
+            key={c.id}
+            task={c}
+            depth={depth + 1}
+            members={members}
+            childrenByParent={childrenByParent}
+            completionByTaskId={completionByTaskId}
+            onCommit={onCommit}
+            onAddSubtask={onAddSubtask}
+            expanded={true}
+            onToggleExpand={onToggleExpand}
+          />
+        ))}
+    </>
   );
 }
 
 function AddTaskRow({ onCancel, onAdd }) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
-
   const save = async () => {
     if (!name.trim()) return;
     setSaving(true);
@@ -69,10 +148,9 @@ function AddTaskRow({ onCancel, onAdd }) {
     setSaving(false);
     setName("");
   };
-
   return (
     <tr className="border-t border-gray-100 bg-slate-50">
-      <td className="px-3 py-2" colSpan={7}>
+      <td className="px-3 py-2" colSpan={8}>
         <div className="flex gap-2">
           <input
             autoFocus
@@ -102,7 +180,7 @@ export default function ProjectDetailPage() {
   const [users, setUsers] = useState([]);
   const [addingTask, setAddingTask] = useState(false);
   const [collapsedPhases, setCollapsedPhases] = useState({});
-  const [expandedSubtasks, setExpandedSubtasks] = useState({});
+  const [expandedTasks, setExpandedTasks] = useState({});
   const [rejectComment, setRejectComment] = useState("");
   const [showReject, setShowReject] = useState(false);
 
@@ -112,7 +190,7 @@ export default function ProjectDetailPage() {
     });
     const unsubTasks = onSnapshot(
       query(collection(db, "projects", id, "tasks"), orderBy("order")),
-      (snap) => setTasks(snap.docs.map((d) => ({ id: d.id, subtasks: [], ...d.data() })))
+      (snap) => setTasks(snap.docs.map((d) => ({ id: d.id, parentTaskId: null, ...d.data() })))
     );
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -129,13 +207,15 @@ export default function ProjectDetailPage() {
   const isApprover = project?.approverId === user?.uid;
   const isOwner = project?.ownerId === user?.uid;
 
-  const scheduledDueDates = tasks.filter((t) => t.dueDate).map((t) => t.dueDate);
+  const topLevelTasks = tasks.filter((t) => !t.parentTaskId);
+  const { completionByTaskId, phaseCompletion, projectCompletion, childrenByParent } = computeRollups(tasks);
+
+  const scheduledDueDates = topLevelTasks.filter((t) => t.dueDate).map((t) => t.dueDate);
   const proposedBaseline = scheduledDueDates.length ? scheduledDueDates.sort().at(-1) : null;
 
-  const commitTaskChange = async (taskId, changes) => {
-    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, ...changes } : t));
-    const scheduled = computeSchedule(updatedTasks, project.startDate);
-
+  const commitTopLevelChange = async (taskId, changes) => {
+    const updated = topLevelTasks.map((t) => (t.id === taskId ? { ...t, ...changes } : t));
+    const scheduled = computeSchedule(updated, project.startDate);
     const batch = writeBatch(db);
     scheduled.forEach((t) => {
       batch.update(doc(db, "projects", id, "tasks", t.id), {
@@ -151,8 +231,17 @@ export default function ProjectDetailPage() {
     await batch.commit();
   };
 
+  const commitTask = async (task, changes) => {
+    if (!task.parentTaskId) {
+      await commitTopLevelChange(task.id, changes);
+    } else {
+      await updateDoc(doc(db, "projects", id, "tasks", task.id), changes);
+    }
+  };
+
   const addManualTask = async (name) => {
     await addDoc(collection(db, "projects", id, "tasks"), {
+      parentTaskId: null,
       phase: "Additional Tasks",
       name,
       notes: "",
@@ -165,25 +254,31 @@ export default function ProjectDetailPage() {
       actualCompletionDate: null,
       status: "Not Started",
       blockedBy: [],
-      subtasks: [],
       order: tasks.length + 1,
     });
     setAddingTask(false);
   };
 
-  const toggleSubtask = async (task, subtaskId) => {
-    const updated = task.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s));
-    await updateDoc(doc(db, "projects", id, "tasks", task.id), { subtasks: updated });
-  };
-
-  const addSubtask = async (task, name) => {
-    const updated = [...task.subtasks, { id: `${Date.now()}`, name, done: false }];
-    await updateDoc(doc(db, "projects", id, "tasks", task.id), { subtasks: updated });
-  };
-
-  const removeSubtask = async (task, subtaskId) => {
-    const updated = task.subtasks.filter((s) => s.id !== subtaskId);
-    await updateDoc(doc(db, "projects", id, "tasks", task.id), { subtasks: updated });
+  const addSubtask = async (parentTask) => {
+    const name = window.prompt("Subtask name");
+    if (!name || !name.trim()) return;
+    await addDoc(collection(db, "projects", id, "tasks"), {
+      parentTaskId: parentTask.id,
+      phase: parentTask.phase,
+      name: name.trim(),
+      notes: "",
+      responsibleRole: "",
+      assigneeId: null,
+      estimatedHours: null,
+      actualHours: null,
+      startDate: null,
+      dueDate: null,
+      actualCompletionDate: null,
+      status: "Not Started",
+      blockedBy: [],
+      order: Date.now(),
+    });
+    setExpandedTasks((p) => ({ ...p, [parentTask.id]: true }));
   };
 
   const submitBaseline = async () => {
@@ -215,7 +310,7 @@ export default function ProjectDetailPage() {
   }
 
   const phaseOrder = [];
-  tasks.forEach((t) => {
+  topLevelTasks.forEach((t) => {
     if (!phaseOrder.includes(t.phase)) phaseOrder.push(t.phase);
   });
 
@@ -235,11 +330,14 @@ export default function ProjectDetailPage() {
           </div>
           <p className="text-xs text-gray-500">{project.description}</p>
         </div>
-        {project.folderUrl && (
-          <a href={project.folderUrl} target="_blank" rel="noreferrer" className="text-[11px] text-teal-700 underline whitespace-nowrap">
-            Project Folder ↗
-          </a>
-        )}
+        <div className="flex items-center gap-3">
+          <ProgressBar pct={projectCompletion} />
+          {project.folderUrl && (
+            <a href={project.folderUrl} target="_blank" rel="noreferrer" className="text-[11px] text-teal-700 underline whitespace-nowrap">
+              Project Folder ↗
+            </a>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4 text-[13px]">
@@ -353,110 +451,37 @@ export default function ProjectDetailPage() {
           <tbody>
             {addingTask && <AddTaskRow onCancel={() => setAddingTask(false)} onAdd={addManualTask} />}
             {phaseOrder.map((phase, phaseIdx) => {
-              const phaseTasks = tasks.filter((t) => t.phase === phase);
+              const phaseTasks = topLevelTasks.filter((t) => t.phase === phase);
               const collapsed = collapsedPhases[phase];
               return (
                 <Fragment key={phase}>
-                  <tr
-                    onClick={() => setCollapsedPhases((p) => ({ ...p, [phase]: !p[phase] }))}
-                    className={`cursor-pointer border-l-2 ${phaseColor(phaseIdx)}`}
-                  >
-                    <td colSpan={8} className="px-3 py-1.5 text-[11px] font-semibold uppercase">
-                      {collapsed ? "▸" : "▾"} {phase}{" "}
-                      <span className="font-normal normal-case text-[10px] opacity-70">
-                        ({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})
-                      </span>
+                  <tr onClick={() => setCollapsedPhases((p) => ({ ...p, [phase]: !p[phase] }))} className={`cursor-pointer border-l-2 ${phaseColor(phaseIdx)}`}>
+                    <td colSpan={8} className="px-3 py-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase">
+                          {collapsed ? "▸" : "▾"} {phase}{" "}
+                          <span className="font-normal normal-case text-[10px] opacity-70">
+                            ({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})
+                          </span>
+                        </span>
+                        <ProgressBar pct={phaseCompletion[phase] || 0} />
+                      </div>
                     </td>
                   </tr>
                   {!collapsed &&
                     phaseTasks.map((t) => (
-                      <Fragment key={t.id}>
-                        <tr className="border-t border-gray-100 hover:bg-slate-50/50 align-top">
-                          <td className="px-3 py-1.5">
-                            <div className="text-navy">{t.name}</div>
-                            <button
-                              onClick={() => setExpandedSubtasks((p) => ({ ...p, [t.id]: !p[t.id] }))}
-                              className="text-[10px] text-teal-700 mt-0.5"
-                            >
-                              {t.subtasks?.length ? `${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length} subtasks` : "+ subtasks"}
-                            </button>
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <select
-                              value={t.assigneeId || ""}
-                              onChange={(e) => commitTaskChange(t.id, { assigneeId: e.target.value || null })}
-                              className="w-full border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
-                            >
-                              <option value="">Unassigned</option>
-                              {members.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              defaultValue={t.estimatedHours || ""}
-                              onBlur={(e) => commitTaskChange(t.id, { estimatedHours: e.target.value ? Number(e.target.value) : null })}
-                              placeholder="—"
-                              className="w-16 border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
-                            />
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              defaultValue={t.actualHours || ""}
-                              onBlur={(e) => commitTaskChange(t.id, { actualHours: e.target.value ? Number(e.target.value) : null })}
-                              placeholder="—"
-                              className="w-16 border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
-                            />
-                          </td>
-                          <td className="px-3 py-1.5 text-gray-500 text-[11px]">{t.startDate || "—"}</td>
-                          <td className="px-3 py-1.5 text-gray-500 text-[11px]">{t.dueDate || "—"}</td>
-                          <td className="px-3 py-1.5">
-                            <input
-                              type="date"
-                              defaultValue={t.actualCompletionDate || ""}
-                              onChange={(e) => commitTaskChange(t.id, { actualCompletionDate: e.target.value || null })}
-                              className="border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
-                            />
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <select
-                              value={t.status}
-                              onChange={(e) => commitTaskChange(t.id, { status: e.target.value })}
-                              className="border-none bg-transparent text-[11px]"
-                            >
-                              {STATUSES.map((s) => (
-                                <option key={s} value={s}>
-                                  {s}
-                                </option>
-                              ))}
-                            </select>
-                            <div className="mt-0.5">
-                              <StatusBadge status={t.status} />
-                            </div>
-                          </td>
-                        </tr>
-                        {expandedSubtasks[t.id] && (
-                          <tr>
-                            <td colSpan={8} className="p-0">
-                              <SubtaskList
-                                subtasks={t.subtasks || []}
-                                onToggle={(sid) => toggleSubtask(t, sid)}
-                                onAdd={(name) => addSubtask(t, name)}
-                                onRemove={(sid) => removeSubtask(t, sid)}
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        depth={0}
+                        members={members}
+                        childrenByParent={childrenByParent}
+                        completionByTaskId={completionByTaskId}
+                        onCommit={commitTask}
+                        onAddSubtask={addSubtask}
+                        expanded={!!expandedTasks[t.id]}
+                        onToggleExpand={(taskId) => setExpandedTasks((p) => ({ ...p, [taskId]: !p[taskId] }))}
+                      />
                     ))}
                 </Fragment>
               );

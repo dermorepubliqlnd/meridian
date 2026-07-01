@@ -15,6 +15,15 @@ export const STATUS_STYLES = {
   Done: "bg-emerald-50 border-emerald-400 text-emerald-700",
 };
 
+// Simple pill version — solid rounded fill, no border, used where a status
+// needs to double as an inline-editable control.
+export const STATUS_PILL_STYLES = {
+  "Not Started": "bg-gray-100 text-gray-600",
+  "In Progress": "bg-blue-100 text-blue-700",
+  Blocked: "bg-rose-100 text-rose-700",
+  Done: "bg-emerald-100 text-emerald-700",
+};
+
 export function phaseColor(index) {
   return PHASE_COLORS[index % PHASE_COLORS.length];
 }
