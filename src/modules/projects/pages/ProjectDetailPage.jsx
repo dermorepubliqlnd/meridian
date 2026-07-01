@@ -41,8 +41,11 @@ function derivedStatus(children) {
 
 function TaskRow({
   task, depth, members, childrenByParent, completionByTaskId,
-  onCommit, onAddSubtask, onDelete, onMove, expanded, onToggleExpand, isFirst, isLast,
+  onCommit, onAddSubtask, onDelete, onMove, onIndent, onOutdent,
+  expanded, onToggleExpand, isFirst, isLast, canIndent,
+  selectedIds, onToggleSelect,
 }) {
+  const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
   const hasChildren = children.length > 0;
   const rolledEstHours = hasChildren ? children.reduce((s, c) => s + (c.estimatedHours || 0), 0) : task.estimatedHours;
@@ -54,9 +57,17 @@ function TaskRow({
       <tr className="border-t border-gray-100 hover:bg-slate-50/50 align-top">
         <td className="px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 20}px` }}>
           <div className="flex items-start gap-1.5">
+            <input type="checkbox" checked={!!selected} onChange={() => onToggleSelect(task.id)} className="mt-1" />
             <div className="flex flex-col mt-0.5">
               <button onClick={() => !isFirst && onMove(task, -1)} disabled={isFirst} className="text-gray-300 hover:text-navy disabled:opacity-30 text-[9px] leading-none">▲</button>
               <button onClick={() => !isLast && onMove(task, 1)} disabled={isLast} className="text-gray-300 hover:text-navy disabled:opacity-30 text-[9px] leading-none">▼</button>
+            </div>
+            <div className="flex flex-col mt-0.5">
+              {depth === 0 ? (
+                <button onClick={() => canIndent && onIndent(task)} disabled={!canIndent} title="Make subtask of task above" className="text-gray-300 hover:text-navy disabled:opacity-30 text-[10px] leading-none">→</button>
+              ) : (
+                <button onClick={() => onOutdent(task)} title="Promote to top-level task" className="text-gray-300 hover:text-navy text-[10px] leading-none">←</button>
+              )}
             </div>
             {hasChildren && (
               <button onClick={() => onToggleExpand(task.id)} className="text-gray-400 text-[10px] mt-0.5">
@@ -182,10 +193,15 @@ function TaskRow({
             onAddSubtask={onAddSubtask}
             onDelete={onDelete}
             onMove={onMove}
+            onIndent={onIndent}
+            onOutdent={onOutdent}
             expanded={true}
             onToggleExpand={onToggleExpand}
             isFirst={idx === 0}
             isLast={idx === children.length - 1}
+            canIndent={false}
+            selectedIds={selectedIds}
+            onToggleSelect={onToggleSelect}
           />
         ))}
     </>
@@ -226,6 +242,8 @@ export default function ProjectDetailPage() {
   const [expandedTasks, setExpandedTasks] = useState({});
   const [rejectComment, setRejectComment] = useState("");
   const [showReject, setShowReject] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkMoveTarget, setBulkMoveTarget] = useState("");
 
   useEffect(() => {
     const unsubProject = onSnapshot(doc(db, "projects", id), (snap) => {
@@ -352,6 +370,84 @@ export default function ProjectDetailPage() {
   };
 
   const [manualBaseline, setManualBaseline] = useState("");
+
+  const toggleSelect = (taskId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId);
+      return next;
+    });
+  };
+
+  const indentTask = async (task) => {
+    const siblings = topLevelTasks.filter((t) => t.phase === task.phase).sort((a, b) => a.order - b.order);
+    const idx = siblings.findIndex((t) => t.id === task.id);
+    if (idx <= 0) return;
+    const newParent = siblings[idx - 1];
+    const newParentChildren = childrenByParent[newParent.id] || [];
+    await updateDoc(doc(db, "projects", id, "tasks", task.id), {
+      parentTaskId: newParent.id,
+      order: newParentChildren.length + 1,
+    });
+    const remainingTopLevel = topLevelTasks.filter((t) => t.id !== task.id);
+    const rolledSiblings = [...newParentChildren, task];
+    const updated = remainingTopLevel.map((t) =>
+      t.id === newParent.id
+        ? { ...t, estimatedHours: rolledSiblings.reduce((s, c) => s + (c.estimatedHours || 0), 0) || null,
+            actualHours: rolledSiblings.reduce((s, c) => s + (c.actualHours || 0), 0) || null,
+            status: derivedStatus(rolledSiblings) }
+        : t
+    );
+    await runTopLevelCascade(updated);
+  };
+
+  const outdentTask = async (task) => {
+    const parent = tasks.find((t) => t.id === task.parentTaskId);
+    if (!parent) return;
+    const phaseTopLevel = topLevelTasks.filter((t) => t.phase === parent.phase).sort((a, b) => a.order - b.order);
+    const parentIdx = phaseTopLevel.findIndex((t) => t.id === parent.id);
+    const nextSibling = phaseTopLevel[parentIdx + 1];
+    const newOrder = nextSibling ? (parent.order + nextSibling.order) / 2 : parent.order + 0.5;
+    await updateDoc(doc(db, "projects", id, "tasks", task.id), { parentTaskId: null, order: newOrder });
+    const remainingChildren = (childrenByParent[parent.id] || []).filter((c) => c.id !== task.id);
+    const updated = [
+      ...topLevelTasks.map((t) =>
+        t.id === parent.id
+          ? { ...t, estimatedHours: remainingChildren.reduce((s, c) => s + (c.estimatedHours || 0), 0) || null,
+              actualHours: remainingChildren.reduce((s, c) => s + (c.actualHours || 0), 0) || null,
+              status: derivedStatus(remainingChildren) }
+          : t
+      ),
+      { ...task, parentTaskId: null, order: newOrder },
+    ].sort((a, b) => a.order - b.order);
+    await runTopLevelCascade(updated);
+  };
+
+  const bulkDeleteSelected = async () => {
+    if (!selectedIds.size) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected task(s)? Subtasks under any selected parent will also be deleted.`)) return;
+    const batch = writeBatch(db);
+    const idsToDelete = new Set(selectedIds);
+    tasks.forEach((t) => {
+      if (t.parentTaskId && idsToDelete.has(t.parentTaskId)) idsToDelete.add(t.id);
+    });
+    idsToDelete.forEach((tid) => batch.delete(doc(db, "projects", id, "tasks", tid)));
+    await batch.commit();
+    const remaining = topLevelTasks.filter((t) => !idsToDelete.has(t.id));
+    await runTopLevelCascade(remaining);
+    setSelectedIds(new Set());
+  };
+
+  const bulkMoveToPhase = async () => {
+    if (!selectedIds.size || !bulkMoveTarget) return;
+    const batch = writeBatch(db);
+    selectedIds.forEach((tid) => {
+      batch.update(doc(db, "projects", id, "tasks", tid), { phase: bulkMoveTarget, parentTaskId: null });
+    });
+    await batch.commit();
+    setSelectedIds(new Set());
+    setBulkMoveTarget("");
+  };
 
   const submitBaseline = async () => {
     const dateToSubmit = proposedBaseline || manualBaseline;
@@ -563,6 +659,22 @@ export default function ProjectDetailPage() {
           <h3 className="text-[13px] font-semibold text-navy font-heading">Task List — {project.workTypeName}</h3>
           <button onClick={() => setAddingTask(true)} className="text-[11px] text-navy underline">+ Add Task</button>
         </div>
+        {selectedIds.size > 0 && (
+          <div className="px-3 py-2 bg-slate-50 border-b border-gray-100 flex items-center gap-3 text-[11px]">
+            <span className="text-gray-500">{selectedIds.size} selected</span>
+            <button onClick={bulkDeleteSelected} className="text-red-500 hover:underline">Delete selected</button>
+            <div className="flex items-center gap-1.5">
+              <select value={bulkMoveTarget} onChange={(e) => setBulkMoveTarget(e.target.value)} className="border border-gray-300 rounded-md px-1.5 py-1 text-[11px]">
+                <option value="">Move to phase...</option>
+                {phaseOrder.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <button onClick={bulkMoveToPhase} disabled={!bulkMoveTarget} className="text-navy underline disabled:opacity-30 disabled:no-underline">Move</button>
+            </div>
+            <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 ml-auto">Clear</button>
+          </div>
+        )}
         <table className="w-full text-[12px]">
           <thead className="bg-slate-50 text-left text-[10px] text-gray-400 uppercase tracking-wide font-medium">
             <tr>
@@ -607,10 +719,15 @@ export default function ProjectDetailPage() {
                         onAddSubtask={addSubtask}
                         onDelete={deleteTask}
                         onMove={moveTask}
+                        onIndent={indentTask}
+                        onOutdent={outdentTask}
                         expanded={!!expandedTasks[t.id]}
                         onToggleExpand={(taskId) => setExpandedTasks((p) => ({ ...p, [taskId]: !p[taskId] }))}
                         isFirst={idx === 0}
                         isLast={idx === phaseTasks.length - 1}
+                        canIndent={idx > 0}
+                        selectedIds={selectedIds}
+                        onToggleSelect={toggleSelect}
                       />
                     ))}
                 </Fragment>
