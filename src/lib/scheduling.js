@@ -2,11 +2,12 @@
 //
 // Rule: Date Span (working days) = ceil(Estimated Hours / Daily Capacity).
 // Tasks are scheduled sequentially in WBS order (each starts the working day
-// after the previous task's due date) since no dependency graph UI exists
-// yet beyond template order. Weekends are skipped. Holidays and per-person
-// time off are NOT yet factored in — that lands with the Resources module,
-// which is where daily capacity and the holiday calendar will actually live.
-// Until then every assignee defaults to an 8-hour day.
+// after the previous task's due date) unless a task has a manually pinned
+// Start Date (startDateOverridden), in which case that date anchors it and
+// downstream tasks continue the cascade from there. Weekends are skipped.
+// Holidays and per-person time off are NOT yet factored in — that lands
+// with the Resources module. Until then every assignee defaults to an
+// 8-hour day.
 
 export const DEFAULT_DAILY_CAPACITY_HOURS = 8;
 
@@ -38,27 +39,24 @@ function toISO(date) {
   return date.toISOString().slice(0, 10);
 }
 
-/**
- * Computes start/due dates for an ordered list of tasks.
- * @param {Array} tasks - ordered tasks, each optionally with estimatedHours
- * @param {string} projectStartDateISO - "YYYY-MM-DD"
- * @param {number} dailyCapacityHours - hours/day for the assignee (defaults to 8)
- * @returns {Array} tasks with startDate/dueDate (ISO strings) added, or null if
- *   estimatedHours isn't set yet for that task.
- */
 export function computeSchedule(tasks, projectStartDateISO, dailyCapacityHours = DEFAULT_DAILY_CAPACITY_HOURS) {
   let cursor = projectStartDateISO ? new Date(projectStartDateISO) : new Date();
   let hasStarted = false;
 
   return tasks.map((task) => {
     if (!task.estimatedHours || task.estimatedHours <= 0) {
-      return { ...task, startDate: null, dueDate: null };
+      return { ...task, startDate: task.startDateOverridden ? task.startDate : null, dueDate: null };
     }
 
     const capacity = task.dailyCapacityHours || dailyCapacityHours;
     const spanDays = Math.max(1, Math.ceil(task.estimatedHours / capacity));
 
-    const start = hasStarted ? nextWorkingDay(cursor) : cursor;
+    let start;
+    if (task.startDateOverridden && task.startDate) {
+      start = new Date(task.startDate);
+    } else {
+      start = hasStarted ? nextWorkingDay(cursor) : cursor;
+    }
     const due = addWorkingDays(start, spanDays - 1);
 
     cursor = due;

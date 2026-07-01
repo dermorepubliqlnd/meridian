@@ -156,6 +156,7 @@ export default function NewProjectPage() {
               estimatedHours: null,
               actualHours: null,
               startDate: null,
+              startDateOverridden: false,
               dueDate: null,
               actualCompletionDate: null,
               status: "Not Started",
