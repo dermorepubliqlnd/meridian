@@ -55,7 +55,8 @@ export default function ProjectsPage() {
             <tr>
               <th className="px-3 py-2">Project</th>
               <th className="px-3 py-2">Owner</th>
-              <th className="px-3 py-2">Baseline End</th>
+              <th className="px-3 py-2">Priority</th>
+              <th className="px-3 py-2">Baseline</th>
               <th className="px-3 py-2">Status</th>
             </tr>
           </thead>
