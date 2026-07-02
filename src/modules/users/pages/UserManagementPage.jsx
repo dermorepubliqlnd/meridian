@@ -11,9 +11,9 @@ import {
 } from "firebase/firestore";
 import { db, createUserWithoutSignIn } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
+import { useSettingsList } from "../../../lib/useSettingsList";
 
 const SYSTEM_ROLES = ["Admin", "Contributor", "Exec Viewer"];
-const JOB_TITLES_DOC = doc(db, "settings", "jobTitles");
 
 function genTempPassword() {
   return "Md" + Math.random().toString(36).slice(-8) + "!1";
@@ -112,8 +112,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
 export default function UserManagementPage() {
   const { profile } = useAuth();
   const [users, setUsers] = useState([]);
-  const [jobTitles, setJobTitles] = useState([]);
-  const [newTitle, setNewTitle] = useState("");
+  const [jobTitles] = useSettingsList("jobTitles", ["Content Developer", "Instructional Designer", "L&D Director", "L&D Supervisor", "Trainer"]);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     name: "",
@@ -132,36 +131,7 @@ export default function UserManagementPage() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    const load = async () => {
-      const snap = await getDoc(JOB_TITLES_DOC);
-      if (snap.exists()) {
-        setJobTitles(snap.data().titles || []);
-      } else {
-        const defaults = [
-          "L&D Director",
-          "L&D Supervisor",
-          "Instructional Designer",
-          "Content Developer",
-          "Trainer",
-        ];
-        await setDoc(JOB_TITLES_DOC, { titles: defaults });
-        setJobTitles(defaults);
-      }
-    };
-    load();
-  }, []);
-
   const isAdmin = profile?.role === "Admin";
-
-  const addJobTitle = async () => {
-    const title = newTitle.trim();
-    if (!title || jobTitles.includes(title)) return;
-    await updateDoc(JOB_TITLES_DOC, { titles: arrayUnion(title) });
-    setJobTitles((prev) => [...prev, title]);
-    setForm((f) => ({ ...f, jobTitle: title }));
-    setNewTitle("");
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -249,22 +219,7 @@ export default function UserManagementPage() {
                 </option>
               ))}
             </select>
-            <div className="flex gap-2 mt-2">
-              <input
-                type="text"
-                placeholder="Add new job title..."
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal"
-              />
-              <button
-                type="button"
-                onClick={addJobTitle}
-                className="text-xs bg-slate-100 text-navy px-2 py-1 rounded-md hover:bg-slate-200"
-              >
-                + Add
-              </button>
-            </div>
+            <p className="text-[11px] text-gray-400 mt-1">Manage job titles in Admin Settings → Job Titles.</p>
           </div>
 
           <div>

@@ -8,6 +8,7 @@ const DEFAULTS = {
   trainingTypes:   ["Onboarding", "Compliance & Safety", "Technical & Systems", "Leadership", "Professional Development", "Operational Support", "L&D Improvements"],
   deliveryFormats: ["Face-to-Face ILT", "Virtual ILT", "Blended", "E-Learning"],
   departments:     ["Finance", "Human Resources", "Information Technology", "Learning & Development", "Marketing", "Operations", "Production", "Quality Assurance", "Sales", "Supply Chain", "Warehouse"],
+  jobTitles:       ["Content Developer", "Instructional Designer", "L&D Director", "L&D Supervisor", "Trainer"],
 };
 
 function useAdminList(docId) {
@@ -306,10 +307,11 @@ export default function AdminSettingsPage() {
       </p>
       <div className="space-y-4">
         <WorkCalendarSection />
-        <div className="grid grid-cols-3 gap-4">
-          <SettingsList docId="trainingTypes"   label="Training Types"      description="Options for Training Type in the New Project form." />
-          <SettingsList docId="deliveryFormats" label="Delivery Formats"    description="Options for Delivery Format in the New Project form." />
+        <div className="grid grid-cols-4 gap-4">
+          <SettingsList docId="trainingTypes"   label="Training Types"        description="Options for Training Type in the New Project form." />
+          <SettingsList docId="deliveryFormats" label="Delivery Formats"      description="Options for Delivery Format in the New Project form." />
           <SettingsList docId="departments"     label="Requestor Departments" description="Department options when logging an intake request." />
+          <SettingsList docId="jobTitles"       label="Job Titles"            description="Job title options in User Management." />
         </div>
       </div>
     </div>
