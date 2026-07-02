@@ -398,8 +398,12 @@ export default function NewProjectPage() {
                   key={d.value}
                   onClick={() => setForm({ ...form, developmentType: d.value })}
                   className={`text-left border rounded-md p-2 text-[11px] transition ${
-                    form.developmentType === d.value
-                      ? "border-teal bg-teal/10 text-teal-800"
+                    form.developmentType === d.value && d.value === "Level 1"
+                      ? "border-green-400 bg-green-50 text-green-800 ring-1 ring-green-300"
+                      : form.developmentType === d.value && d.value === "Level 2"
+                      ? "border-amber-400 bg-amber-50 text-amber-800 ring-1 ring-amber-300"
+                      : form.developmentType === d.value && d.value === "Level 3"
+                      ? "border-red-400 bg-red-50 text-red-800 ring-1 ring-red-300"
                       : "border-gray-200 text-gray-500 hover:border-gray-300"
                   }`}
                 >
@@ -452,23 +456,57 @@ export default function NewProjectPage() {
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
             <label className="text-[11px] text-gray-500 mb-2 block">Team Members</label>
-            <p className="text-[11px] text-gray-400 mb-2">
-              Add people who will work on this project. Owner and Approver are included automatically.
-            </p>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {users
-                .filter((u) => u.id !== form.ownerId && u.id !== form.approverId)
-                .map((u) => (
-                  <label key={u.id} className="flex items-center gap-2 text-[13px] py-0.5">
-                    <input
-                      type="checkbox"
-                      checked={form.memberIds.includes(u.id)}
-                      onChange={() => toggleMember(u.id)}
-                    />
-                    {u.name}{u.jobTitle ? <span className="text-gray-400 text-[11px]"> — {u.jobTitle}</span> : ""}
-                  </label>
-                ))}
+            {/* Auto-included: Owner + Approver chips */}
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {form.ownerId && (
+                <span className="inline-flex items-center gap-1 bg-navy/10 text-navy text-[11px] rounded-full px-2.5 py-1">
+                  {users.find((u) => u.id === form.ownerId)?.name || "Owner"}
+                  <span className="text-navy/40 text-[9px]">Owner</span>
+                </span>
+              )}
+              {form.approverId && form.approverId !== form.ownerId && (
+                <span className="inline-flex items-center gap-1 bg-navy/10 text-navy text-[11px] rounded-full px-2.5 py-1">
+                  {users.find((u) => u.id === form.approverId)?.name || "Approver"}
+                  <span className="text-navy/40 text-[9px]">Approver</span>
+                </span>
+              )}
+              {/* Added contributors */}
+              {form.memberIds.map((uid) => {
+                const u = users.find((x) => x.id === uid);
+                return u ? (
+                  <span key={uid} className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-800 text-[11px] rounded-full px-2.5 py-1">
+                    {u.name}
+                    <button type="button" onClick={() => toggleMember(uid)} className="text-teal-400 hover:text-red-400 ml-0.5 leading-none">✕</button>
+                  </span>
+                ) : null;
+              })}
             </div>
+            {/* Contributor picker */}
+            {(() => {
+              const available = users.filter(
+                (u) => u.role !== "Exec Viewer" &&
+                  u.id !== form.ownerId &&
+                  u.id !== form.approverId &&
+                  !form.memberIds.includes(u.id)
+              );
+              if (available.length === 0) return (
+                <p className="text-[11px] text-gray-400 italic">All contributors already added.</p>
+              );
+              return (
+                <select
+                  value=""
+                  onChange={(e) => { if (e.target.value) toggleMember(e.target.value); }}
+                  className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[12px] text-gray-500 focus:outline-none focus:ring-2 focus:ring-teal"
+                >
+                  <option value="">+ Add a contributor…</option>
+                  {available.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
           </div>
 
           {error && <p className="text-[11px] text-red-500">{error}</p>}
