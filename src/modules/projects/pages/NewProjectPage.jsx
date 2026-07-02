@@ -64,6 +64,8 @@ export default function NewProjectPage() {
     folderUrl: "",
     smeName: "",
     targetLaunchDate: "",
+    status: "Not Started",
+    phase: "Scoping",
   });
   const [leapPhases, setLeapPhases] = useState({ Learn: true, Engage: false, Apply: false, Prove: false });
   const [deliveryTouched, setDeliveryTouched] = useState(false);
@@ -145,7 +147,8 @@ export default function NewProjectPage() {
         folderUrl: form.folderUrl || null,
         smeName: form.smeName || null,
         targetLaunchDate: form.targetLaunchDate || null,
-        status: "Scoping",
+        status: "Not Started",
+        phase: "Scoping",
         createdBy: user.uid,
         createdAt: serverTimestamp(),
       });

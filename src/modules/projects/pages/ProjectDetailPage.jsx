@@ -20,7 +20,7 @@ import { computeSchedule } from "../../../lib/scheduling";
 import { computeRollups } from "../../../lib/completion";
 import { useAuth } from "../../../context/AuthContext";
 import { phaseColor, STATUS_PILL_STYLES } from "../../../lib/taskColors";
-import { computeHealth, PROJECT_STATUS_GROUPS } from "../../../lib/health";
+import { computeHealth, PROJECT_STATUSES, PROJECT_PHASES, STATUS_STYLES, PHASE_STYLES, migrateLegacyStatus } from "../../../lib/health";
 import { useSettingsList } from "../../../lib/useSettingsList";
 
 const STATUSES = ["Not Started", "In Progress", "Blocked", "Done"];
@@ -45,13 +45,7 @@ function derivedStatus(children) {
   return "Not Started";
 }
 
-function projectStatusStyle(status) {
-  if (["Scoping", "Backlog", "Queued"].includes(status))
-    return "bg-gray-100 text-gray-600 border border-gray-200";
-  if (["Done", "Canceled", "Merged"].includes(status))
-    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
-  return "bg-blue-100 text-blue-700 border border-blue-200";
-}
+// projectStatusStyle removed — using STATUS_STYLES from health.js
 
 function TaskRow({
   task, depth, members, childrenByParent, completionByTaskId,
@@ -107,7 +101,12 @@ function TaskRow({
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
-                <span className={`text-navy ${hasChildren ? "font-semibold" : ""}`}>{task.name}</span>
+                <span className={`text-navy ${hasChildren ? "font-semibold" : ""}`}>
+                  {task.name}
+                  {hasChildren && (
+                    <span className="ml-1 text-[10px] font-normal text-gray-400">({children.length})</span>
+                  )}
+                </span>
                 {isOverdue && (
                   <span className="text-red-500 text-[10px] font-semibold bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5 flex-shrink-0">Overdue</span>
                 )}
@@ -115,7 +114,9 @@ function TaskRow({
                   <button onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-teal-600 hover:text-teal-700 font-bold text-[13px] px-0.5 leading-none flex-shrink-0" title="Add subtask">+</button>
                 )}
                 {task.notes && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" title="Has note" />
+                  <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" title="Has note" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.8 8.8 0 01-4.043-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd"/>
+                  </svg>
                 )}
               </div>
               {/* Indent / Outdent — only shown when row is selected */}
@@ -721,7 +722,7 @@ export default function ProjectDetailPage() {
       baselineStatus: "Locked",
       baselineEndDate: project.proposedBaselineEndDate,
       baselineRejectionComment: null,
-      status: project.status === "Scoping" ? "Planning" : project.status,
+      phase: project.phase === "Scoping" ? "Planning" : project.phase,
     });
   };
   const rejectBaseline = async () => {
@@ -773,25 +774,60 @@ export default function ProjectDetailPage() {
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
             <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
             <span className="bg-violet-50 border-l-2 border-violet-300 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">{project.priority}</span>
-            {/* Status — pill dropdown */}
+            {/* Status — lifecycle dropdown */}
             <select
-              value={project.status || "Scoping"}
+              value={PROJECT_STATUSES.includes(project.status) ? project.status : "Active"}
               onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
-              className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${projectStatusStyle(project.status || "Scoping")}`}
+              className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${STATUS_STYLES[project.status] || STATUS_STYLES["Active"]}`}
             >
-              {Object.entries(PROJECT_STATUS_GROUPS).map(([group, options]) => (
-                <optgroup key={group} label={group}>
-                  {options.map((s) => <option key={s} value={s}>{s}</option>)}
-                </optgroup>
-              ))}
+              {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            {/* Phase — ADDIE stage dropdown */}
+            <select
+              value={PROJECT_PHASES.includes(project.phase) ? project.phase : "Scoping"}
+              onChange={(e) => updateDoc(doc(db, "projects", id), { phase: e.target.value })}
+              className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${PHASE_STYLES[project.phase] || PHASE_STYLES["Scoping"]}`}
+            >
+              {PROJECT_PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {/* Health RAG badge */}
             <span className="text-[10px] text-gray-400 mr-0.5">Health:</span>
-            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>{health.label}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>
+              {health.label}
+              {health.isOverridden && <span className="ml-1 text-[9px] opacity-70">(manual)</span>}
+            </span>
+            {(isOwner || isAdmin) && health.rag !== "grey" && (
+              <button
+                onClick={() => {
+                  const note = window.prompt("Override health reason (required):");
+                  if (!note) return;
+                  const rags = ["green","amber","red"];
+                  const cur = health.isOverridden ? health.rag : health.rag;
+                  const idx = rags.indexOf(cur);
+                  const next = rags[(idx + 1) % rags.length];
+                  updateDoc(doc(db, "projects", id), { healthOverride: { rag: next, note } });
+                  addDoc(collection(db, "projects", id, "activity"), {
+                    type: "health_override", message: `Health manually set to ${next === "green" ? "On Track" : next === "amber" ? "At Risk" : "Behind Schedule"}. Reason: ${note}`,
+                    uid: user.uid, createdAt: serverTimestamp(),
+                  });
+                }}
+                className="text-[10px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded px-1.5 py-0.5"
+                title="Override health status"
+              >
+                {health.isOverridden ? "Clear override" : "Override"}
+              </button>
+            )}
+            {health.isOverridden && (isOwner || isAdmin) && (
+              <button
+                onClick={() => updateDoc(doc(db, "projects", id), { healthOverride: null })}
+                className="text-[10px] text-red-400 hover:text-red-600"
+              >✕ clear</button>
+            )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">{project.description}</p>
         </div>
         <div className="flex items-center gap-3">
-          {isOwner && project.status === "Scoping" && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
+          {isOwner && project.phase === "Scoping" && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
             <button
               onClick={submitBaseline}
               disabled={!proposedBaseline && !manualBaseline}

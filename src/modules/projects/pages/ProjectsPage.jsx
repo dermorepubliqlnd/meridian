@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { collection, collectionGroup, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
-import { computeHealth } from "../../../lib/health";
+import { computeHealth, STATUS_STYLES, PHASE_STYLES, PROJECT_STATUSES, PROJECT_PHASES, migrateLegacyStatus } from "../../../lib/health";
 import { computeRollups } from "../../../lib/completion";
 
 const STORAGE_KEY = "meridian.projectsTable.v1";
@@ -60,44 +60,29 @@ const EFFORT_PILL = {
   "Level 3": "bg-red-100 text-red-700",
 };
 
-// Notion-inspired status colors — grouped by workflow stage
-const STATUS_PILL = {
-  Scoping:     "bg-violet-100 text-violet-700",
-  Backlog:     "bg-gray-100 text-gray-500",
-  Queued:      "bg-slate-100 text-slate-600",
-  Planning:    "bg-yellow-100 text-yellow-700",
-  Design:      "bg-blue-100 text-blue-700",
-  Development: "bg-orange-100 text-orange-700",
-  Delivery:    "bg-green-100 text-green-700",
-  Evaluation:  "bg-teal-100 text-teal-700",
-  Paused:      "bg-amber-100 text-amber-600",
-  Done:        "bg-emerald-100 text-emerald-700",
-  Canceled:    "bg-red-100 text-red-600",
-  Merged:      "bg-gray-100 text-gray-500",
-};
+// Status + Phase pills come from health.js STATUS_STYLES / PHASE_STYLES
 
-// Group header accent colors (left border + bg tint) keyed by status/health label
+// Group header accent colors keyed by status/phase/health label
 const GROUP_HEADER_ACCENT = {
-  // Status groups
-  Scoping:               "border-l-4 border-violet-400 bg-violet-50/60",
-  Backlog:               "border-l-4 border-gray-300 bg-gray-50",
-  Queued:                "border-l-4 border-slate-300 bg-slate-50",
-  Planning:              "border-l-4 border-yellow-400 bg-yellow-50/60",
-  Design:                "border-l-4 border-blue-400 bg-blue-50/60",
-  Development:           "border-l-4 border-orange-400 bg-orange-50/60",
-  Delivery:              "border-l-4 border-green-400 bg-green-50/60",
-  Evaluation:            "border-l-4 border-teal-400 bg-teal-50/60",
-  Paused:                "border-l-4 border-amber-400 bg-amber-50/60",
-  Done:                  "border-l-4 border-emerald-400 bg-emerald-50/60",
-  Canceled:              "border-l-4 border-red-300 bg-red-50/60",
-  Merged:                "border-l-4 border-gray-300 bg-gray-50",
+  // Status (lifecycle)
+  "Not Started": "border-l-4 border-gray-300 bg-gray-50",
+  "Active":      "border-l-4 border-blue-400 bg-blue-50/60",
+  "On Hold":     "border-l-4 border-amber-400 bg-amber-50/60",
+  "Done":        "border-l-4 border-emerald-400 bg-emerald-50/60",
+  "Canceled":    "border-l-4 border-red-300 bg-red-50/60",
+  // Phase (ADDIE)
+  "Scoping":        "border-l-4 border-slate-400 bg-slate-50",
+  "Planning":       "border-l-4 border-yellow-400 bg-yellow-50/60",
+  "Design":         "border-l-4 border-purple-400 bg-purple-50/60",
+  "Development":    "border-l-4 border-blue-400 bg-blue-50/60",
+  "Review":         "border-l-4 border-orange-400 bg-orange-50/60",
+  "Implementation": "border-l-4 border-teal-400 bg-teal-50/60",
+  "Evaluation":     "border-l-4 border-emerald-400 bg-emerald-50/60",
   // Health labels
-  "On Track":            "border-l-4 border-emerald-400 bg-emerald-50/60",
-  "At Risk":             "border-l-4 border-orange-400 bg-orange-50/60",
-  "Behind Schedule":     "border-l-4 border-red-400 bg-red-50/60",
-  "Delayed — Near Completion": "border-l-4 border-orange-300 bg-orange-50/40",
-  "Status Not Updated":  "border-l-4 border-amber-400 bg-amber-50/60",
-  "Not Started":         "border-l-4 border-gray-300 bg-gray-50",
+  "On Track":                   "border-l-4 border-emerald-400 bg-emerald-50/60",
+  "At Risk":                    "border-l-4 border-orange-400 bg-orange-50/60",
+  "Behind Schedule":            "border-l-4 border-red-400 bg-red-50/60",
+  "Delayed — Near Completion":  "border-l-4 border-orange-300 bg-orange-50/40",
 };
 const GROUP_HEADER_DEFAULT = "border-l-4 border-navy/20 bg-slate-50";
 
@@ -174,8 +159,8 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor, overdueCount }
       return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{lvl || "—"}</span>;
     }
     case "status": {
-      const s = p.status || "Scoping";
-      const cls = STATUS_PILL[s] || "bg-gray-100 text-gray-500";
+      const s = PROJECT_STATUSES.includes(p.status) ? p.status : (p.status ? migrateLegacyStatus(p.status).status : "Not Started");
+      const cls = STATUS_STYLES[s] || "bg-gray-100 text-gray-500";
       return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{s}</span>;
     }
     case "health":
@@ -276,7 +261,14 @@ export default function ProjectsPage() {
   const groups = useMemo(() => {
     if (table.groupBy === "none") return [{ label: null, rows: sortRows(rows) }];
     const groupKeyFor = (row) => {
-      if (table.groupBy === "status") return row.p.status || "Scoping";
+      if (table.groupBy === "status") {
+        const s = row.p.status;
+        return PROJECT_STATUSES.includes(s) ? s : (s ? migrateLegacyStatus(s).status : "Not Started");
+      }
+      if (table.groupBy === "phase") {
+        const ph = row.p.phase;
+        return PROJECT_PHASES.includes(ph) ? ph : (row.p.status ? migrateLegacyStatus(row.p.status).phase : "Scoping");
+      }
       if (table.groupBy === "health") return row.health.label;
       if (table.groupBy === "ownerId") return nameFor(row.p.ownerId);
       return "";
@@ -403,6 +395,7 @@ export default function ProjectsPage() {
         >
           <option value="none">No grouping</option>
           <option value="status">Group by Status</option>
+          <option value="phase">Group by Phase</option>
           <option value="health">Group by Health</option>
           <option value="ownerId">Group by Owner</option>
         </select>

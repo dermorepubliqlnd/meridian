@@ -1,74 +1,118 @@
-export const PROJECT_STATUS_GROUPS = {
-  "To-do": ["Scoping", "Backlog", "Queued"],
-  "In Progress": ["Planning", "Design", "Development", "Delivery", "Evaluation", "Paused"],
-  Complete: ["Done", "Canceled", "Merged"],
+// ── Project Status (lifecycle) ────────────────────────────────────────────────
+export const PROJECT_STATUSES = ["Not Started", "Active", "On Hold", "Done", "Canceled"];
+
+export const STATUS_STYLES = {
+  "Not Started": "bg-gray-100 text-gray-500 border border-gray-200",
+  "Active":      "bg-blue-100 text-blue-700 border border-blue-200",
+  "On Hold":     "bg-amber-100 text-amber-700 border border-amber-200",
+  "Done":        "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  "Canceled":    "bg-gray-100 text-gray-400 border border-gray-200",
 };
 
-export const PROJECT_STATUSES = Object.values(PROJECT_STATUS_GROUPS).flat();
+// ── Project Phase (ADDIE stage) ───────────────────────────────────────────────
+export const PROJECT_PHASES = [
+  "Scoping",
+  "Planning",
+  "Design",
+  "Development",
+  "Review",
+  "Implementation",
+  "Evaluation",
+];
 
-const TODO_STATUSES = PROJECT_STATUS_GROUPS["To-do"];
+export const PHASE_STYLES = {
+  "Scoping":        "bg-slate-100 text-slate-600",
+  "Planning":       "bg-yellow-100 text-yellow-700",
+  "Design":         "bg-purple-100 text-purple-700",
+  "Development":    "bg-blue-100 text-blue-700",
+  "Review":         "bg-orange-100 text-orange-700",
+  "Implementation": "bg-teal-100 text-teal-700",
+  "Evaluation":     "bg-emerald-100 text-emerald-700",
+};
 
-export function computeHealth(project, completionPct) {
-  const status = project.status || "Scoping";
-  const start = project.startDate ? new Date(project.startDate) : null;
-  // Deadline used for adherence math: approved revision > locked baseline > live proposed
-  // baseline (max task due date) — so health stays meaningful even before a baseline is locked.
-  const end =
-    project.approvedRevisedEndDate || project.baselineEndDate || project.proposedBaselineEndDate;
-  const endDate = end ? new Date(end) : null;
-  const today = new Date();
-
-  let adherence = null;
-  if (start && endDate && endDate > start) {
-    const expectedPct = Math.min(100, Math.max(0, ((today - start) / (endDate - start)) * 100));
-    adherence = expectedPct > 0 ? (completionPct / expectedPct) * 100 : completionPct > 0 ? 100 : null;
-  }
-
-  // --- Terminal / manual-override states: always honored regardless of dates. ---
-  if (status === "Canceled") return { label: "Canceled", style: "bg-gray-100 text-gray-500" };
-  if (status === "Done" || status === "Merged" || completionPct >= 100) {
-    return { label: "Done", style: "bg-emerald-100 text-emerald-700" };
-  }
-  if (status === "Paused") return { label: "Paused", style: "bg-gray-100 text-gray-600" };
-
-  // --- Scoping: the default status at project creation. No baseline has been
-  // locked yet, so there is nothing to measure schedule adherence against.
-  // A project stays here on purpose until its baseline is approved — at which
-  // point approveBaseline() auto-advances status to "Planning" and the normal
-  // status/health rules below start applying. ---
-  if (status === "Scoping") return { label: "Scoping", style: "bg-gray-100 text-gray-500" };
-
-  // --- Data-integrity flag: work has started but status was never moved off the backlog. ---
-  if (completionPct > 0 && TODO_STATUSES.includes(status)) {
-    return { label: "Status Not Updated", style: "bg-amber-100 text-amber-800" };
-  }
-  if (status === "Backlog") return { label: "Backlog", style: "bg-gray-100 text-gray-500" };
-  if (status === "Queued") return { label: "Queued", style: "bg-gray-100 text-gray-500" };
-
-  // --- Not started: start date hasn't arrived and nothing has been logged yet. ---
-  if (start && today < start && completionPct === 0) {
-    return { label: "Not Started", style: "bg-gray-100 text-gray-500" };
-  }
-
-  // --- Deadline check runs BEFORE the "Planning" short-circuit on purpose.
-  // Loophole this closes: a project left sitting in "Planning" status (or any
-  // in-progress sub-stage) could blow past its own deadline and still show a
-  // calm yellow "Planning" badge forever, because status alone gated the label.
-  // Once the effective end date has passed and the project isn't done, the
-  // real schedule state overrides whatever the manual status still says. ---
-  if (endDate && today > endDate && completionPct < 100) {
-    if (adherence !== null && adherence >= 90) {
-      return { label: "Delayed — Near Completion", style: "bg-orange-100 text-orange-700" };
-    }
-    return { label: "Behind Schedule", style: "bg-red-100 text-red-700" };
-  }
-
-  if (status === "Planning") return { label: "Planning", style: "bg-yellow-100 text-yellow-700" };
-
-  // --- No usable timeline yet (no start, no end, or baseline never proposed). ---
-  if (adherence === null) return { label: "Scoping", style: "bg-gray-100 text-gray-500" };
-
-  if (adherence >= 90) return { label: "On Track", style: "bg-emerald-100 text-emerald-700" };
-  if (adherence >= 80) return { label: "At Risk", style: "bg-orange-100 text-orange-700" };
-  return { label: "Behind Schedule", style: "bg-red-100 text-red-700" };
+// ── Legacy status → new status + phase mapping (for existing projects) ────────
+export function migrateLegacyStatus(oldStatus) {
+  const map = {
+    "Scoping":    { status: "Active",       phase: "Scoping" },
+    "Backlog":    { status: "Not Started",  phase: "Scoping" },
+    "Queued":     { status: "Not Started",  phase: "Scoping" },
+    "Planning":   { status: "Active",       phase: "Planning" },
+    "Design":     { status: "Active",       phase: "Design" },
+    "Development":{ status: "Active",       phase: "Development" },
+    "Delivery":   { status: "Active",       phase: "Implementation" },
+    "Evaluation": { status: "Active",       phase: "Evaluation" },
+    "Paused":     { status: "On Hold",      phase: "Development" },
+    "Done":       { status: "Done",         phase: "Evaluation" },
+    "Merged":     { status: "Done",         phase: "Evaluation" },
+    "Canceled":   { status: "Canceled",     phase: "Scoping" },
+  };
+  return map[oldStatus] || { status: "Active", phase: "Scoping" };
 }
+
+// ── Health (RAG) ──────────────────────────────────────────────────────────────
+// Returns { label, rag: "green"|"amber"|"red"|"grey", style, isOverridden }
+export function computeHealth(project, completionPct) {
+  const status = project.status || "Not Started";
+  const phase  = project.phase  || "Scoping";
+
+  // Manual override — owner/admin can set RAG with a note
+  if (project.healthOverride) {
+    const { rag } = project.healthOverride;
+    return {
+      label: rag === "green" ? "On Track" : rag === "amber" ? "At Risk" : "Behind Schedule",
+      rag,
+      style: RAG_STYLES[rag],
+      isOverridden: true,
+    };
+  }
+
+  // Terminal / inactive states
+  if (status === "Canceled")     return { label: "Canceled",    rag: "grey",  style: RAG_STYLES.grey,  isOverridden: false };
+  if (status === "Done" || completionPct >= 100)
+                                  return { label: "Done",        rag: "grey",  style: RAG_STYLES.grey,  isOverridden: false };
+  if (status === "On Hold")       return { label: "On Hold",     rag: "grey",  style: RAG_STYLES.grey,  isOverridden: false };
+  if (status === "Not Started")   return { label: "Not Started", rag: "grey",  style: RAG_STYLES.grey,  isOverridden: false };
+
+  // Active project — compute adherence
+  const start   = project.startDate ? new Date(project.startDate) : null;
+  const end     = project.approvedRevisedEndDate || project.baselineEndDate || project.proposedBaselineEndDate;
+  const endDate = end ? new Date(end) : null;
+  const today   = new Date();
+
+  // No timeline yet → Scoping phase, can't measure
+  if (!start || !endDate || endDate <= start) {
+    return { label: "Scoping", rag: "grey", style: RAG_STYLES.grey, isOverridden: false };
+  }
+
+  // Past deadline and not done
+  if (today > endDate && completionPct < 100) {
+    const expectedPct = 100;
+    const adherence   = completionPct / expectedPct * 100;
+    if (adherence >= 85) return { label: "Delayed — Near Completion", rag: "amber", style: RAG_STYLES.amber, isOverridden: false };
+    return { label: "Behind Schedule", rag: "red", style: RAG_STYLES.red, isOverridden: false };
+  }
+
+  // Within timeline
+  const expectedPct = Math.min(100, Math.max(0, ((today - start) / (endDate - start)) * 100));
+  if (expectedPct === 0) {
+    return { label: "Not Started", rag: "grey", style: RAG_STYLES.grey, isOverridden: false };
+  }
+  const adherence = (completionPct / expectedPct) * 100;
+
+  if (adherence >= 90) return { label: "On Track",        rag: "green", style: RAG_STYLES.green, isOverridden: false };
+  if (adherence >= 75) return { label: "At Risk",         rag: "amber", style: RAG_STYLES.amber, isOverridden: false };
+  return                      { label: "Behind Schedule", rag: "red",   style: RAG_STYLES.red,   isOverridden: false };
+}
+
+export const RAG_STYLES = {
+  green: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  amber: "bg-amber-100 text-amber-700 border border-amber-200",
+  red:   "bg-red-100 text-red-700 border border-red-200",
+  grey:  "bg-gray-100 text-gray-500 border border-gray-200",
+};
+
+// Keep this exported for any code still importing PROJECT_STATUS_GROUPS
+export const PROJECT_STATUS_GROUPS = {
+  "Lifecycle": PROJECT_STATUSES,
+  "Phases":    PROJECT_PHASES,
+};

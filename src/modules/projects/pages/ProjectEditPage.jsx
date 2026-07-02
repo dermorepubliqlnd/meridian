@@ -7,6 +7,7 @@ import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
 import { useSettingsList } from "../../../lib/useSettingsList";
 import { PRIORITIES, PROJECT_SOURCES, DEVELOPMENT_TYPES } from "../../../data/staticOptions";
+import { PROJECT_STATUSES, PROJECT_PHASES, STATUS_STYLES, PHASE_STYLES, migrateLegacyStatus } from "../../../lib/health";
 
 const DEFAULT_TRAINING_TYPES = ["Onboarding","Compliance & Safety","Technical & Systems","Leadership","Professional Development","Operational Support","L&D Improvements"];
 const DEFAULT_DELIVERY_FORMATS = ["Face-to-Face ILT","Virtual ILT","Blended","E-Learning"];
@@ -55,6 +56,8 @@ export default function ProjectEditPage() {
           targetLaunchDate: p.targetLaunchDate || "",
           startDate: p.startDate || "",
           folderUrl: p.folderUrl || "",
+          status: PROJECT_STATUSES.includes(p.status) ? p.status : (p.status ? migrateLegacyStatus(p.status).status : "Not Started"),
+          phase: PROJECT_PHASES.includes(p.phase) ? p.phase : (p.status ? migrateLegacyStatus(p.status).phase : "Scoping"),
         });
       }
     });
@@ -84,18 +87,20 @@ export default function ProjectEditPage() {
     const newApprover = form.approverId;
 
     await updateDoc(doc(db, "projects", id), {
-      name: form.name.trim(),
-      description: form.description.trim(),
+      name: (form.name || "").trim(),
+      description: (form.description || "").trim(),
       ownerId: newOwner,
       approverId: newApprover,
       priority: form.priority,
       trainingType: form.trainingType || null,
       deliveryFormat: form.deliveryFormat || null,
       developmentType: form.developmentType || null,
-      smeName: form.smeName.trim() || null,
+      smeName: (form.smeName || "").trim() || null,
       targetLaunchDate: form.targetLaunchDate || null,
       startDate: form.startDate || null,
-      folderUrl: form.folderUrl.trim() || null,
+      folderUrl: (form.folderUrl || "").trim() || null,
+      status: form.status,
+      phase: form.phase,
     });
 
     const nameOf = (uid) => users.find((u) => u.id === uid)?.name || uid;
@@ -154,6 +159,22 @@ export default function ProjectEditPage() {
           </Field>
           <Field label="SME Name" optional>
             <input type="text" placeholder="Subject Matter Expert…" value={form.smeName} onChange={f("smeName")} className={inputCls} />
+          </Field>
+        </div>
+
+        <hr className="border-gray-100" />
+
+        {/* Status + Phase */}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Status">
+            <select value={form.status} onChange={f("status")} className={inputCls}>
+              {PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </Field>
+          <Field label="Phase (ADDIE Stage)">
+            <select value={form.phase} onChange={f("phase")} className={inputCls}>
+              {PROJECT_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
           </Field>
         </div>
 
@@ -222,7 +243,7 @@ export default function ProjectEditPage() {
           disabled={saving || !form.name.trim()}
           className="px-5 py-2 text-[13px] bg-navy text-white rounded-md hover:bg-navy-light disabled:opacity-40"
         >
-          {saving ? "Saving…" : "Save Changes"}
+          {saving ? "Saving…" : "Update Project Settings"}
         </button>
       </div>
     </div>
