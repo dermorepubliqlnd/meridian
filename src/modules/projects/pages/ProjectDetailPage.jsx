@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   doc,
   onSnapshot,
@@ -10,6 +10,7 @@ import {
   updateDoc,
   addDoc,
   deleteDoc,
+  getDocs,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { computeSchedule } from "../../../lib/scheduling";
@@ -55,6 +56,7 @@ function TaskRow({
   selectedIds, onToggleSelect,
   onDragStart, onDragOver, onDrop, onDragEnd,
   isDraggedOver, isDragging,
+  onContextMenuRow,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -73,6 +75,7 @@ function TaskRow({
         onDragOver={isDraggable ? (e) => { e.preventDefault(); onDragOver(task); } : undefined}
         onDrop={isDraggable ? (e) => { e.preventDefault(); onDrop(task); } : undefined}
         onDragEnd={isDraggable ? onDragEnd : undefined}
+        onContextMenu={(e) => { e.preventDefault(); if (onContextMenuRow) onContextMenuRow(e, task, canIndent, depth > 0); }}
       >
         <td className="px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 20}px` }}>
           <div className="flex items-start gap-1.5">
@@ -122,9 +125,6 @@ function TaskRow({
                     + subtask
                   </button>
                 )}
-                <button onClick={() => onDelete(task)} className="text-[10px] text-gray-300 hover:text-red-400">
-                  delete
-                </button>
               </div>
             </div>
           </div>
@@ -275,7 +275,8 @@ function AddTaskRow({ onCancel, onAdd }) {
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
@@ -291,6 +292,8 @@ export default function ProjectDetailPage() {
   const [revisedRejectComment, setRevisedRejectComment] = useState("");
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [showDeleteProjectConfirm, setShowDeleteProjectConfirm] = useState(false);
 
   useEffect(() => {
     const unsubProject = onSnapshot(doc(db, "projects", id), (snap) => {
@@ -392,6 +395,16 @@ export default function ProjectDetailPage() {
       const remaining = topLevelTasks.filter((t) => t.id !== task.id);
       await runTopLevelCascade(remaining);
     }
+  };
+
+  const deleteProject = async () => {
+    // Delete all tasks in subcollection, then the project doc
+    const taskSnap = await getDocs(collection(db, "projects", id, "tasks"));
+    const batch = writeBatch(db);
+    taskSnap.docs.forEach((d) => batch.delete(d.ref));
+    batch.delete(doc(db, "projects", id));
+    await batch.commit();
+    navigate("/projects");
   };
 
   // Drag-and-drop reorder within a phase: remove dragged task, insert before
@@ -572,11 +585,17 @@ export default function ProjectDetailPage() {
                 </optgroup>
               ))}
             </select>
+            <span className="text-[10px] text-gray-400 mr-0.5">Health:</span>
             <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>{health.label}</span>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">{project.description}</p>
         </div>
         <div className="flex items-center gap-3">
+          {profile?.role === "Admin" && (
+            <button onClick={() => setShowDeleteProjectConfirm(true)} className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 rounded-md px-2.5 py-1 hover:border-red-400 transition">
+              Delete project
+            </button>
+          )}
           {project.folderUrl && (
             <a href={project.folderUrl} target="_blank" rel="noreferrer" className="text-[11px] text-teal-700 underline whitespace-nowrap">Project Folder ↗</a>
           )}
@@ -826,6 +845,10 @@ export default function ProjectDetailPage() {
                         onDragEnd={() => { setDraggedTaskId(null); setDragOverTaskId(null); }}
                         isDraggedOver={dragOverTaskId === t.id && draggedTaskId !== t.id}
                         isDragging={draggedTaskId === t.id}
+                        onContextMenuRow={(e, task, canInd, canOut) => {
+                          e.preventDefault();
+                          setContextMenu({ x: e.clientX, y: e.clientY, task, canIndent: canInd, canOutdent: canOut });
+                        }}
                       />
                     ))}
                 </Fragment>
@@ -837,6 +860,58 @@ export default function ProjectDetailPage() {
           </tbody>
         </table>
       </div>
+
+      {/* ── Right-click context menu ── */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[140px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onMouseLeave={() => setContextMenu(null)}
+        >
+          {contextMenu.canIndent && (
+            <button className="w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-slate-50"
+              onClick={() => { indentTask(contextMenu.task); setContextMenu(null); }}>
+              → Indent
+            </button>
+          )}
+          {contextMenu.canOutdent && (
+            <button className="w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-slate-50"
+              onClick={() => { outdentTask(contextMenu.task); setContextMenu(null); }}>
+              ← Outdent
+            </button>
+          )}
+          <button className="w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-slate-50"
+            onClick={() => { addSubtask(contextMenu.task); setContextMenu(null); }}>
+            + Add subtask
+          </button>
+          <div className="border-t border-gray-100 my-0.5" />
+          <button className="w-full text-left px-3 py-1.5 text-[12px] text-red-500 hover:bg-red-50"
+            onClick={() => { deleteTask(contextMenu.task); setContextMenu(null); }}>
+            Delete task
+          </button>
+        </div>
+      )}
+      {contextMenu && <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />}
+
+      {/* ── Delete project confirm ── */}
+      {showDeleteProjectConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-[15px] font-bold text-navy font-heading mb-2">Delete project?</h3>
+            <p className="text-[13px] text-gray-600 mb-4">
+              This will permanently delete <strong>"{project.name}"</strong> and all its tasks. This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowDeleteProjectConfirm(false)} className="px-4 py-2 text-[12px] border border-gray-300 rounded-md text-gray-600 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button onClick={deleteProject} className="px-4 py-2 text-[12px] bg-red-600 text-white rounded-md hover:bg-red-700">
+                Yes, delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
