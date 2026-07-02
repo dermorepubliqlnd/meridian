@@ -436,6 +436,8 @@ export default function ProjectDetailPage() {
   const [newNote, setNewNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [notePanel, setNotePanel] = useState(null); // { taskId, taskName, note }
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState("");
   const [projectNotePanel, setProjectNotePanel] = useState(false);
 
   const [trainingTypes] = useSettingsList("trainingTypes", []);
@@ -1415,19 +1417,29 @@ export default function ProjectDetailPage() {
               <textarea
                 autoFocus
                 value={notePanel.note}
-                onChange={(e) => setNotePanel({ ...notePanel, note: e.target.value })}
+                onChange={(e) => { const v = e.target.value; setNotePanel((p) => ({ ...p, note: v })); }}
                 placeholder="Add a note, link, or context…"
                 rows={6}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none"
               />
               <div className="flex gap-2">
+                {noteError && <p className="text-red-500 text-[11px]">{noteError}</p>}
                 <button
                   onClick={async () => {
-                    await updateDoc(doc(db, "projects", id, "tasks", notePanel.taskId), { notes: notePanel.note.trim() || null });
-                    setNotePanel(null);
+                    setNoteSaving(true);
+                    setNoteError("");
+                    try {
+                      await updateDoc(doc(db, "projects", id, "tasks", notePanel.taskId), { notes: notePanel.note.trim() || null });
+                      setNotePanel(null);
+                    } catch (err) {
+                      setNoteError("Save failed: " + err.message);
+                    } finally {
+                      setNoteSaving(false);
+                    }
                   }}
-                  className="flex-1 bg-navy text-white rounded-md py-1.5 text-[12px] font-medium"
-                >Save Note</button>
+                  disabled={noteSaving}
+                  className="flex-1 bg-navy text-white rounded-md py-1.5 text-[12px] font-medium disabled:opacity-50"
+                >{noteSaving ? "Saving…" : "Save Note"}</button>
                 <button onClick={() => setNotePanel(null)} className="px-3 py-1.5 text-[12px] border border-gray-300 rounded-md text-gray-600">Cancel</button>
               </div>
             </div>
