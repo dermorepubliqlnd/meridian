@@ -12,6 +12,8 @@ import {
   deleteDoc,
   getDocs,
   arrayUnion,
+  serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { computeSchedule } from "../../../lib/scheduling";
@@ -19,6 +21,7 @@ import { computeRollups } from "../../../lib/completion";
 import { useAuth } from "../../../context/AuthContext";
 import { phaseColor, STATUS_PILL_STYLES } from "../../../lib/taskColors";
 import { computeHealth, PROJECT_STATUS_GROUPS } from "../../../lib/health";
+import { useSettingsList } from "../../../lib/useSettingsList";
 
 const STATUSES = ["Not Started", "In Progress", "Blocked", "Done"];
 
@@ -59,6 +62,7 @@ function TaskRow({
   isDraggedOver, isDragging,
   onContextMenuRow,
   addingSubtaskFor, onCommitSubtask,
+  today, expandedNotes, onToggleNote, onSaveNote,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -66,6 +70,8 @@ function TaskRow({
   const rolledEstHours = hasChildren ? children.reduce((s, c) => s + (c.estimatedHours || 0), 0) : task.estimatedHours;
   const rolledActHours = hasChildren ? children.reduce((s, c) => s + (c.actualHours || 0), 0) : task.actualHours;
   const rolledStatus = hasChildren ? derivedStatus(children) : task.status;
+  const isOverdue = !hasChildren && task.dueDate && task.dueDate < today && task.status !== "Done";
+  const noteExpanded = expandedNotes?.has(task.id);
   const isDraggable = depth === 0;
 
   return (
@@ -102,9 +108,19 @@ function TaskRow({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
                 <span className={`text-navy ${hasChildren ? "font-semibold" : ""}`}>{task.name}</span>
+                {isOverdue && (
+                  <span className="text-red-500 text-[10px] font-semibold bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5 flex-shrink-0">Overdue</span>
+                )}
                 {depth === 0 && (
                   <button onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-teal-600 hover:text-teal-700 font-bold text-[13px] px-0.5 leading-none flex-shrink-0" title="Add subtask">+</button>
                 )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleNote(task.id); }}
+                  className={`opacity-0 group-hover:opacity-100 transition-opacity text-[11px] px-0.5 flex-shrink-0 ${task.notes ? "text-amber-500 opacity-100" : "text-gray-400 hover:text-gray-600"}`}
+                  title={task.notes ? "View/edit note" : "Add note"}
+                >
+                  {task.notes ? "📝" : "🗒"}
+                </button>
               </div>
               {/* Indent / Outdent — only shown when row is selected */}
               {selected && (
@@ -248,8 +264,26 @@ function TaskRow({
             isDragging={false}
             addingSubtaskFor={addingSubtaskFor}
             onCommitSubtask={onCommitSubtask}
+            today={today}
+            expandedNotes={expandedNotes}
+            onToggleNote={onToggleNote}
+            onSaveNote={onSaveNote}
           />
         ))}
+      {noteExpanded && (
+        <tr className="border-t border-amber-100 bg-amber-50/40">
+          <td colSpan={8} style={{ paddingLeft: `${12 + depth * 20 + 28}px` }} className="px-3 py-2 pr-4">
+            <textarea
+              autoFocus={!task.notes}
+              defaultValue={task.notes || ""}
+              onBlur={(e) => onSaveNote(task, e.target.value)}
+              placeholder="Add a note, link, or context for this task..."
+              rows={2}
+              className="w-full text-[12px] text-gray-700 border border-amber-200 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-300 resize-none"
+            />
+          </td>
+        </tr>
+      )}
       {expanded && addingSubtaskFor === task.id && (
         <AddSubtaskRow
           depth={1}
@@ -392,6 +426,15 @@ export default function ProjectDetailPage() {
   const [contextMenu, setContextMenu] = useState(null);
   const [showDeleteProjectConfirm, setShowDeleteProjectConfirm] = useState(false);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState(null);
+  const [editingProject, setEditingProject] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [expandedNotes, setExpandedNotes] = useState(new Set());
+  const [newNote, setNewNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
+  const [trainingTypes] = useSettingsList("trainingTypes", []);
+  const [deliveryFormats] = useSettingsList("deliveryFormats", []);
+  const [departments] = useSettingsList("departments", []);
 
   useEffect(() => {
     const unsubProject = onSnapshot(doc(db, "projects", id), (snap) => {
@@ -418,6 +461,10 @@ export default function ProjectDetailPage() {
   const { completionByTaskId, phaseCompletion, projectCompletion, childrenByParent } = computeRollups(tasks);
 
   const health = project ? computeHealth(project, projectCompletion) : null;
+  const today = new Date().toISOString().split("T")[0];
+  const overdueTasks = topLevelTasks.filter(
+    (t) => t.dueDate && t.dueDate < today && t.status !== "Done"
+  );
 
   const scheduledDueDates = topLevelTasks.filter((t) => t.dueDate).map((t) => t.dueDate);
   const proposedBaseline = scheduledDueDates.length ? scheduledDueDates.sort().at(-1) : null;
@@ -500,13 +547,66 @@ export default function ProjectDetailPage() {
   };
 
   const deleteProject = async () => {
-    // Delete all tasks in subcollection, then the project doc
     const taskSnap = await getDocs(collection(db, "projects", id, "tasks"));
     const batch = writeBatch(db);
     taskSnap.docs.forEach((d) => batch.delete(d.ref));
     batch.delete(doc(db, "projects", id));
     await batch.commit();
     navigate("/projects");
+  };
+
+  const openEditProject = () => {
+    setEditForm({
+      name: project.name || "",
+      description: project.description || "",
+      ownerId: project.ownerId || "",
+      approverId: project.approverId || "",
+      priority: project.priority || "Medium",
+      trainingType: project.trainingType || "",
+      deliveryFormat: project.deliveryFormat || "",
+      developmentType: project.developmentType || "",
+      smeName: project.smeName || "",
+      targetLaunchDate: project.targetLaunchDate || "",
+      folderUrl: project.folderUrl || "",
+    });
+    setEditingProject(true);
+  };
+
+  const saveProjectEdit = async () => {
+    const changes = {
+      name: editForm.name.trim(),
+      description: editForm.description.trim(),
+      ownerId: editForm.ownerId,
+      approverId: editForm.approverId,
+      priority: editForm.priority,
+      trainingType: editForm.trainingType || null,
+      deliveryFormat: editForm.deliveryFormat || null,
+      developmentType: editForm.developmentType || null,
+      smeName: editForm.smeName.trim() || null,
+      targetLaunchDate: editForm.targetLaunchDate || null,
+      folderUrl: editForm.folderUrl.trim() || null,
+    };
+    await updateDoc(doc(db, "projects", id), changes);
+    await addDoc(collection(db, "projects", id, "activity"), {
+      type: "edit",
+      message: "Project settings updated.",
+      uid: user.uid,
+      createdAt: serverTimestamp(),
+    });
+    setEditingProject(false);
+  };
+
+  const addNote = async () => {
+    if (!newNote.trim()) return;
+    setSavingNote(true);
+    await addDoc(collection(db, "projects", id, "activity"), {
+      type: "note",
+      message: newNote.trim(),
+      uid: user.uid,
+      createdAt: serverTimestamp(),
+    });
+    setNewNote("");
+    setSavingNote(false);
   };
 
   // Drag-and-drop reorder within a phase: remove dragged task, insert before
@@ -716,6 +816,21 @@ export default function ProjectDetailPage() {
 
       {/* ── Project info — form fields ── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 px-5 py-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Project Details</span>
+          {(isOwner || profile?.role === "Admin") && (
+            <button
+              onClick={openEditProject}
+              className="text-gray-400 hover:text-navy transition p-1 rounded hover:bg-gray-100"
+              title="Edit project settings"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-3 gap-x-10 gap-y-4 text-[12px]">
           <div>
             <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Owner</div>
@@ -751,6 +866,14 @@ export default function ProjectDetailPage() {
             </div>
           </div>
           <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">SME</div>
+            <div className="text-navy font-medium">{project.smeName || <span className="text-gray-400 italic font-normal">Not yet identified</span>}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Target Launch</div>
+            <div className="text-navy font-medium">{project.targetLaunchDate || "—"}</div>
+          </div>
+          <div>
             <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Est. Hours (total)</div>
             <div className="text-navy font-medium">
               {(() => {
@@ -769,7 +892,14 @@ export default function ProjectDetailPage() {
             </div>
           </div>
           <div className="col-span-3">
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Completion</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Completion</div>
+              {overdueTasks.length > 0 && (
+                <span className="text-[11px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                  ⚠ {overdueTasks.length} overdue task{overdueTasks.length > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-navy font-bold text-lg">{Math.round(projectCompletion)}%</span>
               <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -1002,6 +1132,14 @@ export default function ProjectDetailPage() {
                         }}
                         addingSubtaskFor={addingSubtaskFor}
                         onCommitSubtask={commitSubtask}
+                        today={today}
+                        expandedNotes={expandedNotes}
+                        onToggleNote={(taskId) => setExpandedNotes((prev) => {
+                          const next = new Set(prev);
+                          next.has(taskId) ? next.delete(taskId) : next.add(taskId);
+                          return next;
+                        })}
+                        onSaveNote={(task, val) => updateDoc(doc(db, "projects", id, "tasks", task.id), { notes: val.trim() || null })}
                       />
                     ))}
                 </Fragment>
@@ -1055,16 +1193,147 @@ export default function ProjectDetailPage() {
               This will permanently delete <strong>"{project.name}"</strong> and all its tasks. This cannot be undone.
             </p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowDeleteProjectConfirm(false)} className="px-4 py-2 text-[12px] border border-gray-300 rounded-md text-gray-600 hover:bg-slate-50">
-                Cancel
-              </button>
-              <button onClick={deleteProject} className="px-4 py-2 text-[12px] bg-red-600 text-white rounded-md hover:bg-red-700">
-                Yes, delete
-              </button>
+              <button onClick={() => setShowDeleteProjectConfirm(false)} className="px-4 py-2 text-[12px] border border-gray-300 rounded-md text-gray-600 hover:bg-slate-50">Cancel</button>
+              <button onClick={deleteProject} className="px-4 py-2 text-[12px] bg-red-600 text-white rounded-md hover:bg-red-700">Yes, delete</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Edit Project Modal ── */}
+      {editingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-[15px] font-bold text-navy font-heading">Edit Project Settings</h3>
+              <button onClick={() => setEditingProject(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4 text-[13px]">
+              <div className="col-span-2">
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Project Name</label>
+                <input type="text" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Description</label>
+                <textarea rows={2} value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none" />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Owner</label>
+                <select value={editForm.ownerId} onChange={(e) => setEditForm({...editForm, ownerId: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                  {users.filter(u => u.role !== "Exec Viewer").map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Approver</label>
+                <select value={editForm.approverId} onChange={(e) => setEditForm({...editForm, approverId: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Priority</label>
+                <select value={editForm.priority} onChange={(e) => setEditForm({...editForm, priority: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                  {["Critical","High","Medium","Low"].map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Training Type</label>
+                <select value={editForm.trainingType} onChange={(e) => setEditForm({...editForm, trainingType: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                  <option value="">— Select —</option>
+                  {trainingTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Delivery Format</label>
+                <select value={editForm.deliveryFormat} onChange={(e) => setEditForm({...editForm, deliveryFormat: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                  <option value="">— Select —</option>
+                  {deliveryFormats.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Development Type</label>
+                <select value={editForm.developmentType} onChange={(e) => setEditForm({...editForm, developmentType: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                  {["Level 1","Level 2","Level 3"].map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">SME Name <span className="text-gray-300 normal-case">(optional)</span></label>
+                <input type="text" placeholder="Subject Matter Expert..." value={editForm.smeName} onChange={(e) => setEditForm({...editForm, smeName: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Target Launch Date <span className="text-gray-300 normal-case">(desired go-live)</span></label>
+                <input type="date" value={editForm.targetLaunchDate} onChange={(e) => setEditForm({...editForm, targetLaunchDate: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Project Folder URL</label>
+                <input type="url" placeholder="https://..." value={editForm.folderUrl} onChange={(e) => setEditForm({...editForm, folderUrl: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => setEditingProject(false)} className="px-4 py-2 text-[12px] border border-gray-300 rounded-md text-gray-600 hover:bg-slate-50">Cancel</button>
+              <button onClick={saveProjectEdit} disabled={!editForm.name?.trim()} className="px-4 py-2 text-[12px] bg-navy text-white rounded-md hover:bg-navy-light disabled:opacity-40">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Activity Log & Notes ── */}
+      <ActivityLog projectId={id} user={user} users={users} newNote={newNote} setNewNote={setNewNote} addNote={addNote} savingNote={savingNote} />
+    </div>
+  );
+}
+
+function ActivityLog({ projectId, user, users, newNote, setNewNote, addNote, savingNote }) {
+  const [log, setLog] = useState([]);
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(db, "projects", projectId, "activity"), orderBy("createdAt", "desc")),
+      (snap) => setLog(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return unsub;
+  }, [projectId]);
+
+  const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "Someone";
+  const formatDate = (ts) => {
+    if (!ts) return "";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-5 mt-4">
+      <h3 className="text-[12px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Notes & Activity</h3>
+      <div className="flex gap-2 mb-4">
+        <textarea
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addNote(); } }}
+          placeholder="Add a note or update… (Enter to save)"
+          rows={2}
+          className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none"
+        />
+        <button onClick={addNote} disabled={savingNote || !newNote.trim()} className="px-4 py-2 text-[12px] bg-navy text-white rounded-md self-end disabled:opacity-40">Post</button>
+      </div>
+      {log.length === 0 && <p className="text-[12px] text-gray-400 italic">No notes yet.</p>}
+      <div className="space-y-2">
+        {log.map((entry) => (
+          <div key={entry.id} className={`flex gap-3 text-[12px] ${entry.type === "note" ? "bg-amber-50/40 border border-amber-100 rounded-md px-3 py-2" : "px-1 py-1 text-gray-400"}`}>
+            {entry.type === "note" ? (
+              <>
+                <div className="w-6 h-6 rounded-full bg-navy text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                  {nameFor(entry.uid).split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
+                </div>
+                <div>
+                  <span className="font-medium text-navy">{nameFor(entry.uid)}</span>
+                  <span className="text-gray-400 ml-2 text-[11px]">{formatDate(entry.createdAt)}</span>
+                  <p className="text-gray-700 mt-0.5">{entry.message}</p>
+                </div>
+              </>
+            ) : (
+              <p className="text-[11px]">🔧 {entry.message} <span className="ml-1">{formatDate(entry.createdAt)}</span></p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

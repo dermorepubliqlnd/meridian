@@ -62,6 +62,8 @@ export default function NewProjectPage() {
     approverId: "",
     memberIds: [],
     folderUrl: "",
+    smeName: "",
+    targetLaunchDate: "",
   });
   const [leapPhases, setLeapPhases] = useState({ Learn: true, Engage: false, Apply: false, Prove: false });
   const [deliveryTouched, setDeliveryTouched] = useState(false);
@@ -141,6 +143,8 @@ export default function NewProjectPage() {
         approverId: form.approverId,
         memberIds: Array.from(new Set([...form.memberIds, form.ownerId, form.approverId])),
         folderUrl: form.folderUrl || null,
+        smeName: form.smeName || null,
+        targetLaunchDate: form.targetLaunchDate || null,
         status: "Scoping",
         createdBy: user.uid,
         createdAt: serverTimestamp(),
@@ -239,6 +243,25 @@ export default function NewProjectPage() {
                 placeholder="https://..."
                 value={form.folderUrl}
                 onChange={(e) => setForm({ ...form, folderUrl: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-500 mb-1 block">SME Name <span className="text-gray-400">(optional — can be added later)</span></label>
+              <input
+                type="text"
+                placeholder="Subject Matter Expert name..."
+                value={form.smeName}
+                onChange={(e) => setForm({ ...form, smeName: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-500 mb-1 block">Target Launch Date <span className="text-gray-400">(optional — desired go-live)</span></label>
+              <input
+                type="date"
+                value={form.targetLaunchDate}
+                onChange={(e) => setForm({ ...form, targetLaunchDate: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
               />
             </div>

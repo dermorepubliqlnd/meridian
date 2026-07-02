@@ -2,9 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/meridian/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>meridian-app</title>
+    <title>Meridian</title>
+    <script>
+      // Restore path from GitHub Pages 404 redirect
+      (function() {
+        var q = window.location.search;
+        if (q && q.indexOf('?p=') === 0) {
+          var path = decodeURIComponent(q.slice(3).replace(/&h=.*$/, ''));
+          var hash = q.indexOf('&h=') > -1 ? '#' + decodeURIComponent(q.slice(q.indexOf('&h=') + 3)) : '';
+          window.history.replaceState(null, null, '/meridian' + path + hash);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

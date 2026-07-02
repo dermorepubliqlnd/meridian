@@ -138,13 +138,20 @@ function cellValue(key, ctx) {
   }
 }
 
-function CellDisplay({ colKey, p, health, completionPct, nameFor }) {
+function CellDisplay({ colKey, p, health, completionPct, nameFor, overdueCount }) {
   switch (colKey) {
     case "name":
       return (
-        <Link to={`/projects/${p.id}`} className="text-navy font-medium hover:underline">
-          {p.name}
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link to={`/projects/${p.id}`} className="text-navy font-medium hover:underline">
+            {p.name}
+          </Link>
+          {overdueCount > 0 && (
+            <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+              ⚠ {overdueCount} overdue
+            </span>
+          )}
+        </div>
       );
     case "description":
       return (
@@ -239,13 +246,19 @@ export default function ProjectsPage() {
 
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
 
+  const today = new Date().toISOString().split("T")[0];
+
   const rows = useMemo(() => {
     return projects.map((p) => {
-      const { projectCompletion } = computeRollups(tasksByProject[p.id] || []);
+      const allTasks = tasksByProject[p.id] || [];
+      const { projectCompletion } = computeRollups(allTasks);
       const health = computeHealth(p, projectCompletion);
-      return { p, health, completionPct: projectCompletion };
+      const overdueCount = allTasks.filter(
+        (t) => !t.parentTaskId && t.dueDate && t.dueDate < today && t.status !== "Done"
+      ).length;
+      return { p, health, completionPct: projectCompletion, overdueCount };
     });
-  }, [projects, tasksByProject]);
+  }, [projects, tasksByProject, today]);
 
   const visibleColumns = table.columnOrder.filter((k) => !table.hiddenColumns.has(k));
 
@@ -450,7 +463,7 @@ export default function ProjectsPage() {
                 >
                   {visibleColumns.map((key) => (
                     <div key={key} className="px-3 py-2 overflow-hidden text-ellipsis whitespace-nowrap">
-                      <CellDisplay colKey={key} p={p} health={health} completionPct={completionPct} nameFor={nameFor} />
+                      <CellDisplay colKey={key} p={p} health={health} completionPct={completionPct} nameFor={nameFor} overdueCount={overdueCount} />
                     </div>
                   ))}
                 </div>
