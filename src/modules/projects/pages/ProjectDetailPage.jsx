@@ -1405,7 +1405,7 @@ export default function ProjectDetailPage() {
       {notePanel && (
         <>
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setNotePanel(null)} />
-          <div className="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
+          <div className="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div>
                 <div className="text-[10px] text-gray-400 uppercase tracking-wide">Task Note</div>
@@ -1425,13 +1425,17 @@ export default function ProjectDetailPage() {
               <div className="flex gap-2">
                 {noteError && <p className="text-red-500 text-[11px]">{noteError}</p>}
                 <button
-                  onClick={async () => {
+                  onClick={async (e) => {
+                    e.stopPropagation();
                     setNoteSaving(true);
                     setNoteError("");
                     try {
+                      console.log("Saving note:", notePanel.taskId, notePanel.note);
                       await updateDoc(doc(db, "projects", id, "tasks", notePanel.taskId), { notes: notePanel.note.trim() || null });
+                      console.log("Note saved OK");
                       setNotePanel(null);
                     } catch (err) {
+                      console.error("Note save failed:", err);
                       setNoteError("Save failed: " + err.message);
                     } finally {
                       setNoteSaving(false);
