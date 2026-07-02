@@ -438,6 +438,7 @@ export default function ProjectDetailPage() {
   const [notePanel, setNotePanel] = useState(null); // { taskId, taskName, note }
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [toast, setToast] = useState("");
   const [projectNotePanel, setProjectNotePanel] = useState(false);
 
   const [trainingTypes] = useSettingsList("trainingTypes", []);
@@ -1430,12 +1431,11 @@ export default function ProjectDetailPage() {
                     setNoteSaving(true);
                     setNoteError("");
                     try {
-                      console.log("Saving note:", notePanel.taskId, notePanel.note);
                       await updateDoc(doc(db, "projects", id, "tasks", notePanel.taskId), { notes: notePanel.note.trim() || null });
-                      console.log("Note saved OK");
                       setNotePanel(null);
+                      setToast("Note saved.");
+                      setTimeout(() => setToast(""), 2500);
                     } catch (err) {
-                      console.error("Note save failed:", err);
                       setNoteError("Save failed: " + err.message);
                     } finally {
                       setNoteSaving(false);
@@ -1479,6 +1479,14 @@ export default function ProjectDetailPage() {
             <ProjectActivityFeed projectId={id} users={users} />
           </div>
         </>
+      )}
+    </div>
+
+      {/* ── Toast notification ── */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[100] bg-navy text-white text-[12px] px-4 py-2 rounded-lg shadow-lg animate-pulse">
+          ✓ {toast}
+        </div>
       )}
     </div>
   );
