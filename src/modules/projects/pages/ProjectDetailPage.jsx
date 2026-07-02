@@ -1480,7 +1480,6 @@ export default function ProjectDetailPage() {
           </div>
         </>
       )}
-    </div>
 
       {/* ── Toast notification ── */}
       {toast && (
