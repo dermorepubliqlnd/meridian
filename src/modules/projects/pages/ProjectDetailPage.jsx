@@ -561,7 +561,7 @@ export default function ProjectDetailPage() {
   };
 
   const openEditProject = () => {
-    setEditForm({
+    setSettingsForm({
       name: project.name || "",
       description: project.description || "",
       ownerId: project.ownerId || "",
@@ -572,34 +572,16 @@ export default function ProjectDetailPage() {
       developmentType: project.developmentType || "",
       smeName: project.smeName || "",
       targetLaunchDate: project.targetLaunchDate || "",
+      startDate: project.startDate || "",
       folderUrl: project.folderUrl || "",
+      status: PROJECT_STATUSES.includes(project.status) ? project.status : "Active",
+      phase: PROJECT_PHASES.includes(project.phase) ? project.phase : "Scoping",
     });
-    setEditingProject(true);
+    setShowSettingsPanel(true);
   };
 
-  const saveProjectEdit = async () => {
-    const changes = {
-      name: editForm.name.trim(),
-      description: editForm.description.trim(),
-      ownerId: editForm.ownerId,
-      approverId: editForm.approverId,
-      priority: editForm.priority,
-      trainingType: editForm.trainingType || null,
-      deliveryFormat: editForm.deliveryFormat || null,
-      developmentType: editForm.developmentType || null,
-      smeName: editForm.smeName.trim() || null,
-      targetLaunchDate: editForm.targetLaunchDate || null,
-      folderUrl: editForm.folderUrl.trim() || null,
-    };
-    await updateDoc(doc(db, "projects", id), changes);
-    await addDoc(collection(db, "projects", id, "activity"), {
-      type: "edit",
-      message: "Project settings updated.",
-      uid: user.uid,
-      createdAt: serverTimestamp(),
-    });
-    setEditingProject(false);
-  };
+
+
 
   const addNote = async () => {
     if (!newNote.trim()) return;
@@ -1269,83 +1251,6 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
-
-      {/* ── Edit Project Modal ── */}
-      {editingProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="text-[15px] font-bold text-navy font-heading">Edit Project Settings</h3>
-              <button onClick={() => setEditingProject(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
-            </div>
-            <div className="px-6 py-5 grid grid-cols-2 gap-4 text-[13px]">
-              <div className="col-span-2">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Project Name</label>
-                <input type="text" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
-              </div>
-              <div className="col-span-2">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Description</label>
-                <textarea rows={2} value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none" />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Owner</label>
-                <select value={editForm.ownerId} onChange={(e) => setEditForm({...editForm, ownerId: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
-                  {users.filter(u => u.role !== "Exec Viewer").map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Approver</label>
-                <select value={editForm.approverId} onChange={(e) => setEditForm({...editForm, approverId: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Priority</label>
-                <select value={editForm.priority} onChange={(e) => setEditForm({...editForm, priority: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
-                  {["Critical","High","Medium","Low"].map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Training Type</label>
-                <select value={editForm.trainingType} onChange={(e) => setEditForm({...editForm, trainingType: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
-                  <option value="">— Select —</option>
-                  {trainingTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Delivery Format</label>
-                <select value={editForm.deliveryFormat} onChange={(e) => setEditForm({...editForm, deliveryFormat: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
-                  <option value="">— Select —</option>
-                  {deliveryFormats.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Development Type</label>
-                <select value={editForm.developmentType} onChange={(e) => setEditForm({...editForm, developmentType: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
-                  {["Level 1","Level 2","Level 3"].map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">SME Name <span className="text-gray-300 normal-case">(optional)</span></label>
-                <input type="text" placeholder="Subject Matter Expert..." value={editForm.smeName} onChange={(e) => setEditForm({...editForm, smeName: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Target Launch Date <span className="text-gray-300 normal-case">(desired go-live)</span></label>
-                <input type="date" value={editForm.targetLaunchDate} onChange={(e) => setEditForm({...editForm, targetLaunchDate: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
-              </div>
-              <div className="col-span-2">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Project Folder URL</label>
-                <input type="url" placeholder="https://..." value={editForm.folderUrl} onChange={(e) => setEditForm({...editForm, folderUrl: e.target.value})} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
-              <button onClick={() => setEditingProject(false)} className="px-4 py-2 text-[12px] border border-gray-300 rounded-md text-gray-600 hover:bg-slate-50">Cancel</button>
-              <button onClick={saveProjectEdit} disabled={!editForm.name?.trim()} className="px-4 py-2 text-[12px] bg-navy text-white rounded-md hover:bg-navy-light disabled:opacity-40">Save Changes</button>
-            </div>
-          </div>
-        </div>
-      )}
-
 
       {/* ── Project Settings Side Panel ── */}
       {showSettingsPanel && settingsForm && (
