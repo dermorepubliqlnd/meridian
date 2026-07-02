@@ -455,7 +455,7 @@ export default function ProjectsPage() {
                   <span className="text-gray-400 font-normal text-[11px]">({group.rows.length})</span>
                 </div>
               )}
-              {group.rows.map(({ p, health, completionPct }) => (
+              {group.rows.map(({ p, health, completionPct, overdueCount }) => (
                 <div
                   key={p.id}
                   className="grid text-[13px] border-b border-gray-50 hover:bg-slate-50"
