@@ -56,7 +56,7 @@ function TaskRow({
   isDraggedOver, isDragging,
   onContextMenuRow,
   addingSubtaskFor, onCommitSubtask,
-  today, expandedNotes, onToggleNote, onSaveNote,
+  today, expandedNotes, onToggleNote, onSaveNote, onOpenNote,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -113,9 +113,9 @@ function TaskRow({
                 {depth === 0 && (
                   <button onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-teal-600 hover:text-teal-700 font-bold text-[13px] px-0.5 leading-none flex-shrink-0" title="Add subtask">+</button>
                 )}
-                {task.notes && (
+                {task.notes?.trim() && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setNotePanel({ taskId: task.id, taskName: task.name, note: task.notes || "" }); }}
+                    onClick={(e) => { e.stopPropagation(); onOpenNote(task); }}
                     className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
                     title="View note"
                   >
@@ -271,6 +271,7 @@ function TaskRow({
             expandedNotes={expandedNotes}
             onToggleNote={onToggleNote}
             onSaveNote={onSaveNote}
+            onOpenNote={onOpenNote}
           />
         ))}
       {noteExpanded && (
@@ -580,8 +581,40 @@ export default function ProjectDetailPage() {
     setShowSettingsPanel(true);
   };
 
-
-
+  const saveProjectSettings = async () => {
+    if (!(settingsForm?.name || "").trim()) return;
+    const prevOwner = project.ownerId;
+    const newOwner = settingsForm.ownerId;
+    const prevApprover = project.approverId;
+    const newApprover = settingsForm.approverId;
+    await updateDoc(doc(db, "projects", id), {
+      name: (settingsForm.name || "").trim(),
+      description: (settingsForm.description || "").trim(),
+      ownerId: newOwner,
+      approverId: newApprover,
+      priority: settingsForm.priority,
+      trainingType: settingsForm.trainingType || null,
+      deliveryFormat: settingsForm.deliveryFormat || null,
+      developmentType: settingsForm.developmentType || null,
+      smeName: (settingsForm.smeName || "").trim() || null,
+      targetLaunchDate: settingsForm.targetLaunchDate || null,
+      startDate: settingsForm.startDate || null,
+      folderUrl: (settingsForm.folderUrl || "").trim() || null,
+      status: settingsForm.status,
+      phase: settingsForm.phase,
+    });
+    const nameOf = (uid) => users.find((u) => u.id === uid)?.name || uid;
+    const logs = ["Project settings updated."];
+    if (prevOwner !== newOwner) logs.push(`Ownership transferred from ${nameOf(prevOwner)} to ${nameOf(newOwner)}.`);
+    if (prevApprover !== newApprover) logs.push(`Approver changed from ${nameOf(prevApprover)} to ${nameOf(newApprover)}.`);
+    await addDoc(collection(db, "projects", id, "activity"), {
+      type: prevOwner !== newOwner ? "ownership_transfer" : "edit",
+      message: logs.join(" "),
+      uid: user.uid,
+      createdAt: serverTimestamp(),
+    });
+    setShowSettingsPanel(false);
+  };
 
   const addNote = async () => {
     if (!newNote.trim()) return;
@@ -1185,6 +1218,7 @@ export default function ProjectDetailPage() {
                           return next;
                         })}
                         onSaveNote={(task, val) => updateDoc(doc(db, "projects", id, "tasks", task.id), { notes: val.trim() || null })}
+                        onOpenNote={(task) => setNotePanel({ taskId: task.id, taskName: task.name, note: task.notes || "" })}
                       />
                     ))}
                 </Fragment>
