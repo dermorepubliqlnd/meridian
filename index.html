@@ -4,9 +4,20 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/meridian/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>meridian-app</title>
-    <script type="module" crossorigin src="/meridian/assets/index-c1Twoahc.js"></script>
-    <link rel="stylesheet" crossorigin href="/meridian/assets/index-BAHF35T7.css">
+    <title>Meridian</title>
+    <script>
+      // Restore path from GitHub Pages 404 redirect
+      (function() {
+        var q = window.location.search;
+        if (q && q.indexOf('?p=') === 0) {
+          var path = decodeURIComponent(q.slice(3).replace(/&h=.*$/, ''));
+          var hash = q.indexOf('&h=') > -1 ? '#' + decodeURIComponent(q.slice(q.indexOf('&h=') + 3)) : '';
+          window.history.replaceState(null, null, '/meridian' + path + hash);
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/meridian/assets/index-BjrDdtiP.js"></script>
+    <link rel="stylesheet" crossorigin href="/meridian/assets/index-CmrUUYB-.css">
   </head>
   <body>
     <div id="root"></div>
