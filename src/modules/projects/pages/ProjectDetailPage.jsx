@@ -114,9 +114,15 @@ function TaskRow({
                   <button onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-teal-600 hover:text-teal-700 font-bold text-[13px] px-0.5 leading-none flex-shrink-0" title="Add subtask">+</button>
                 )}
                 {task.notes && (
-                  <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" title="Has note" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.8 8.8 0 01-4.043-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd"/>
-                  </svg>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setNotePanel({ taskId: task.id, taskName: task.name, note: task.notes || "" }); }}
+                    className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                    title="View note"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.8 8.8 0 01-4.043-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd"/>
+                    </svg>
+                  </button>
                 )}
               </div>
               {/* Indent / Outdent — only shown when row is selected */}
@@ -423,8 +429,8 @@ export default function ProjectDetailPage() {
   const [contextMenu, setContextMenu] = useState(null);
   const [showDeleteProjectConfirm, setShowDeleteProjectConfirm] = useState(false);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState(null);
-  const [editingProject, setEditingProject] = useState(false);
-  const [editForm, setEditForm] = useState({});
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [settingsForm, setSettingsForm] = useState(null);
   const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [newNote, setNewNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -774,8 +780,14 @@ export default function ProjectDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
             <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
-            <span className="bg-violet-50 border-l-2 border-violet-300 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">{project.priority}</span>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${{
+              Critical: "bg-red-50 text-red-700 border-red-200",
+              High:     "bg-orange-50 text-orange-700 border-orange-200",
+              Medium:   "bg-yellow-50 text-yellow-700 border-yellow-200",
+              Low:      "bg-gray-100 text-gray-500 border-gray-200",
+            }[project.priority] || "bg-gray-100 text-gray-500 border-gray-200"}`}>{project.priority}</span>
           </div>
+          {project.description && <p className="text-[12px] text-gray-500 mt-1 mb-0.5">{project.description}</p>}
           {/* Status / Phase / Health pill row with labels */}
           <div className="flex items-end gap-4 mt-2 flex-wrap">
             {/* Status */}
@@ -836,7 +848,6 @@ export default function ProjectDetailPage() {
               >✕ clear</button>
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">{project.description}</p>
         </div>
         <div className="flex items-center gap-3">
           {isOwner && project.phase === "Scoping" && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
@@ -874,7 +885,7 @@ export default function ProjectDetailPage() {
           </div>
           {(isOwner || profile?.role === "Admin") && (
             <button
-              onClick={() => navigate(`/projects/${id}/edit`)}
+              onClick={openEditProject}
               className="text-gray-400 hover:text-navy transition p-1 rounded hover:bg-gray-100"
               title="Edit project settings"
             >
@@ -1334,6 +1345,120 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+
+      {/* ── Project Settings Side Panel ── */}
+      {showSettingsPanel && settingsForm && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowSettingsPanel(false)} />
+          <div className="fixed right-0 top-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide">Project Settings</div>
+                <div className="text-[13px] font-semibold text-navy">{project.name}</div>
+              </div>
+              <button onClick={() => setShowSettingsPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <div className="flex-1 px-5 py-4 space-y-4">
+              {/* Name + description */}
+              {[["Project Name", "name", "text"], ["Description", "description", "textarea"]].map(([label, key, type]) => (
+                <div key={key}>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">{label}</label>
+                  {type === "textarea"
+                    ? <textarea rows={2} value={settingsForm[key]} onChange={(e) => setSettingsForm({ ...settingsForm, [key]: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none" />
+                    : <input type="text" value={settingsForm[key]} onChange={(e) => setSettingsForm({ ...settingsForm, [key]: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />}
+                </div>
+              ))}
+              <hr className="border-gray-100" />
+              {/* Status + Phase */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Status</label>
+                  <select value={settingsForm.status} onChange={(e) => setSettingsForm({ ...settingsForm, status: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                    {PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Phase</label>
+                  <select value={settingsForm.phase} onChange={(e) => setSettingsForm({ ...settingsForm, phase: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                    {PROJECT_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+              </div>
+              <hr className="border-gray-100" />
+              {/* People */}
+              <div className="grid grid-cols-2 gap-3">
+                {[["Owner", "ownerId"], ["Approver", "approverId"]].map(([label, key]) => (
+                  <div key={key}>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">{label}</label>
+                    <select value={settingsForm[key]} onChange={(e) => setSettingsForm({ ...settingsForm, [key]: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                      {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <div className="col-span-2">
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">SME Name</label>
+                  <input type="text" placeholder="Subject Matter Expert…" value={settingsForm.smeName} onChange={(e) => setSettingsForm({ ...settingsForm, smeName: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+                </div>
+              </div>
+              <hr className="border-gray-100" />
+              {/* Classification */}
+              <div className="grid grid-cols-2 gap-3">
+                {[["Priority", "priority", ["Critical","High","Medium","Low"]], ["Development Type", "developmentType", ["","Level 1","Level 2","Level 3"]]].map(([label, key, opts]) => (
+                  <div key={key}>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">{label}</label>
+                    <select value={settingsForm[key]} onChange={(e) => setSettingsForm({ ...settingsForm, [key]: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                      {opts.map(o => <option key={o} value={o}>{o || "— Select —"}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Training Type</label>
+                  <select value={settingsForm.trainingType} onChange={(e) => setSettingsForm({ ...settingsForm, trainingType: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                    <option value="">— Select —</option>
+                    {trainingTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Delivery Format</label>
+                  <select value={settingsForm.deliveryFormat} onChange={(e) => setSettingsForm({ ...settingsForm, deliveryFormat: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal">
+                    <option value="">— Select —</option>
+                    {deliveryFormats.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+              <hr className="border-gray-100" />
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">
+                    Start Date{project.baselineStatus === "Locked" ? " (locked)" : ""}
+                  </label>
+                  <input type="date" value={settingsForm.startDate} onChange={(e) => setSettingsForm({ ...settingsForm, startDate: e.target.value })} disabled={project.baselineStatus === "Locked"} className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal ${project.baselineStatus === "Locked" ? "opacity-50 cursor-not-allowed bg-gray-50" : ""}`} />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Target Launch Date</label>
+                  <input type="date" value={settingsForm.targetLaunchDate} onChange={(e) => setSettingsForm({ ...settingsForm, targetLaunchDate: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+                </div>
+              </div>
+              <hr className="border-gray-100" />
+              {/* Folder URL */}
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Project Folder URL</label>
+                <input type="url" placeholder="https://…" value={settingsForm.folderUrl} onChange={(e) => setSettingsForm({ ...settingsForm, folderUrl: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal" />
+              </div>
+            </div>
+            <div className="sticky bottom-0 bg-white border-t border-gray-100 px-5 py-3 flex gap-3">
+              <button onClick={() => setShowSettingsPanel(false)} className="flex-1 py-2 text-[13px] border border-gray-300 rounded-md text-gray-600 hover:bg-slate-50">Cancel</button>
+              <button
+                onClick={saveProjectSettings}
+                disabled={!(settingsForm.name || "").trim()}
+                className="flex-1 py-2 text-[13px] bg-navy text-white rounded-md hover:bg-navy-light disabled:opacity-40"
+              >Update Project Settings</button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── Task Note Side Panel ── */}
