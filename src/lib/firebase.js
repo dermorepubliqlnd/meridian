@@ -4,12 +4,12 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSyCHfNZyz9kn-Rb3XgwnxmaC9Tdx-3HqPtU",
+  authDomain: "meridian-1caa9.firebaseapp.com",
+  projectId: "meridian-1caa9",
+  storageBucket: "meridian-1caa9.firebasestorage.app",
+  messagingSenderId: "293133715914",
+  appId: "1:293133715914:web:a7c0b2e96a68f03ba7a733",
 };
 
 const app = initializeApp(firebaseConfig);
