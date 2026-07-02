@@ -9,7 +9,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <BrowserRouter basename="/meridian">
+      <BrowserRouter>
         <AuthProvider>
           <App />
         </AuthProvider>
