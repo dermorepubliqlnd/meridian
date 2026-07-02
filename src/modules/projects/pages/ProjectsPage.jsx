@@ -29,7 +29,11 @@ const COLUMN_DEFS = [
   { key: "actualCompletionDate", label: "Actual Completion", width: 140 },
   { key: "completion", label: "Completion %", width: 110 },
   { key: "status", label: "Status", width: 120 },
+  { key: "phase", label: "Phase", width: 130 },
   { key: "health", label: "Health", width: 160 },
+  { key: "smeName", label: "SME", width: 140 },
+  { key: "targetLaunchDate", label: "Target Launch", width: 130 },
+  { key: "memberCount", label: "Team Size", width: 90 },
   { key: "folderUrl", label: "Folder", width: 90 },
 ];
 
@@ -118,6 +122,8 @@ function cellValue(key, ctx) {
     case "approverId": return nameFor(p.approverId);
     case "completion": return Math.round(completionPct);
     case "health":     return health.label;
+    case "phase":      return p.phase ?? "";
+    case "memberCount": return (p.memberIds?.length || 0);
     case "priority":   return PRIORITY_RANK[p.priority] ?? -1;
     default:           return p[key] ?? "";
   }
@@ -179,7 +185,18 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor, overdueCount }
       ) : (
         <span className="text-gray-400">—</span>
       );
-    default: {
+    case "phase": {
+      const ph = p.phase || (p.status ? "—" : "—");
+      const cls = PHASE_STYLES[ph] || "bg-gray-100 text-gray-500";
+      return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{ph || "—"}</span>;
+    }
+    case "smeName":
+      return <span className="text-gray-600">{p.smeName || "—"}</span>;
+    case "targetLaunchDate":
+      return <span className="text-gray-600">{p.targetLaunchDate || "—"}</span>;
+    case "memberCount":
+      return <span className="text-gray-600">{(p.memberIds?.length || 0)}</span>;
+        default: {
       const v = p[colKey];
       return <span className="text-gray-600">{v === null || v === undefined || v === "" ? "—" : String(v)}</span>;
     }
