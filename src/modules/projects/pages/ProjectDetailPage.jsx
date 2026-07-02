@@ -40,11 +40,21 @@ function derivedStatus(children) {
   return "Not Started";
 }
 
+function projectStatusStyle(status) {
+  if (["Scoping", "Backlog", "Queued"].includes(status))
+    return "bg-gray-100 text-gray-600 border border-gray-200";
+  if (["Done", "Canceled", "Merged"].includes(status))
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  return "bg-blue-100 text-blue-700 border border-blue-200";
+}
+
 function TaskRow({
   task, depth, members, childrenByParent, completionByTaskId,
-  onCommit, onAddSubtask, onDelete, onMove, onIndent, onOutdent,
-  expanded, onToggleExpand, isFirst, isLast, canIndent,
+  onCommit, onAddSubtask, onDelete, onIndent, onOutdent,
+  expanded, onToggleExpand, canIndent,
   selectedIds, onToggleSelect,
+  onDragStart, onDragOver, onDrop, onDragEnd,
+  isDraggedOver, isDragging,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -52,31 +62,59 @@ function TaskRow({
   const rolledEstHours = hasChildren ? children.reduce((s, c) => s + (c.estimatedHours || 0), 0) : task.estimatedHours;
   const rolledActHours = hasChildren ? children.reduce((s, c) => s + (c.actualHours || 0), 0) : task.actualHours;
   const rolledStatus = hasChildren ? derivedStatus(children) : task.status;
+  const isDraggable = depth === 0;
 
   return (
     <>
-      <tr className="border-t border-gray-100 hover:bg-slate-50/50 align-top">
+      <tr
+        className={`align-top border-t ${isDraggedOver ? "border-t-2 border-teal bg-teal-50/30" : "border-gray-100"} hover:bg-slate-50/50 ${isDragging ? "opacity-40" : ""}`}
+        draggable={isDraggable}
+        onDragStart={isDraggable ? () => onDragStart(task) : undefined}
+        onDragOver={isDraggable ? (e) => { e.preventDefault(); onDragOver(task); } : undefined}
+        onDrop={isDraggable ? (e) => { e.preventDefault(); onDrop(task); } : undefined}
+        onDragEnd={isDraggable ? onDragEnd : undefined}
+      >
         <td className="px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 20}px` }}>
           <div className="flex items-start gap-1.5">
-            <input type="checkbox" checked={!!selected} onChange={() => onToggleSelect(task.id)} className="mt-1" />
-            <div className="flex flex-col mt-0.5">
-              <button onClick={() => !isFirst && onMove(task, -1)} disabled={isFirst} className="text-gray-300 hover:text-navy disabled:opacity-30 text-[9px] leading-none">▲</button>
-              <button onClick={() => !isLast && onMove(task, 1)} disabled={isLast} className="text-gray-300 hover:text-navy disabled:opacity-30 text-[9px] leading-none">▼</button>
-            </div>
-            <div className="flex flex-col mt-0.5">
-              {depth === 0 ? (
-                <button onClick={() => canIndent && onIndent(task)} disabled={!canIndent} title="Make subtask of task above" className="text-gray-300 hover:text-navy disabled:opacity-30 text-[10px] leading-none">→</button>
-              ) : (
-                <button onClick={() => onOutdent(task)} title="Promote to top-level task" className="text-gray-300 hover:text-navy text-[10px] leading-none">←</button>
-              )}
-            </div>
+            {/* Drag handle — top-level tasks only */}
+            {depth === 0 && (
+              <span
+                className="text-gray-300 cursor-grab active:cursor-grabbing mt-1 text-[13px] select-none hover:text-gray-500 flex-shrink-0"
+                title="Drag to reorder"
+              >⠿</span>
+            )}
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect(task.id)}
+              className="mt-1 flex-shrink-0"
+            />
             {hasChildren && (
-              <button onClick={() => onToggleExpand(task.id)} className="text-gray-400 text-[10px] mt-0.5">
+              <button onClick={() => onToggleExpand(task.id)} className="text-gray-400 text-[10px] mt-0.5 flex-shrink-0">
                 {expanded ? "▾" : "▸"}
               </button>
             )}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="text-navy">{task.name}</div>
+              {/* Indent / Outdent — only shown when row is selected */}
+              {selected && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  {depth === 0 && canIndent && (
+                    <button
+                      onClick={() => onIndent(task)}
+                      title="Make subtask of task above"
+                      className="text-[10px] text-teal-700 border border-teal-200 bg-teal-50 rounded px-1.5 py-0.5 hover:bg-teal-100"
+                    >→ Indent</button>
+                  )}
+                  {depth > 0 && (
+                    <button
+                      onClick={() => onOutdent(task)}
+                      title="Promote to top-level task"
+                      className="text-[10px] text-teal-700 border border-teal-200 bg-teal-50 rounded px-1.5 py-0.5 hover:bg-teal-100"
+                    >← Outdent</button>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-2 mt-0.5">
                 {hasChildren && <ProgressBar pct={completionByTaskId[task.id] || 0} />}
                 {depth === 0 && (
@@ -182,7 +220,7 @@ function TaskRow({
         </td>
       </tr>
       {expanded &&
-        children.map((c, idx) => (
+        children.map((c) => (
           <TaskRow
             key={c.id}
             task={c}
@@ -193,16 +231,19 @@ function TaskRow({
             onCommit={onCommit}
             onAddSubtask={onAddSubtask}
             onDelete={onDelete}
-            onMove={onMove}
             onIndent={onIndent}
             onOutdent={onOutdent}
             expanded={true}
             onToggleExpand={onToggleExpand}
-            isFirst={idx === 0}
-            isLast={idx === children.length - 1}
             canIndent={false}
             selectedIds={selectedIds}
             onToggleSelect={onToggleSelect}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            onDragEnd={onDragEnd}
+            isDraggedOver={false}
+            isDragging={false}
           />
         ))}
     </>
@@ -245,6 +286,11 @@ export default function ProjectDetailPage() {
   const [showReject, setShowReject] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkMoveTarget, setBulkMoveTarget] = useState("");
+  const [manualBaseline, setManualBaseline] = useState("");
+  const [showRevisedReject, setShowRevisedReject] = useState(false);
+  const [revisedRejectComment, setRevisedRejectComment] = useState("");
+  const [draggedTaskId, setDraggedTaskId] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
 
   useEffect(() => {
     const unsubProject = onSnapshot(doc(db, "projects", id), (snap) => {
@@ -260,17 +306,6 @@ export default function ProjectDetailPage() {
     return () => { unsubProject(); unsubTasks(); unsubUsers(); };
   }, [id]);
 
-  // Guard placed immediately after data-loading effects, before ANY other
-  // computation in this component. Root cause of the "blank page after
-  // creating a project" bug: several consts below (e.g. effectiveLockedEnd)
-  // read `project.xxx` directly with no optional chaining, and ran on every
-  // render -- including the very first render, when `project` is still null
-  // because Firestore's onSnapshot hasn't delivered data yet. That threw an
-  // uncaught TypeError with no error boundary in the tree, which unmounted
-  // the whole app (not just this page) -- hence blank screen AND a dead
-  // browser back button, since navigating back just re-renders the same
-  // crash. Putting the guard here, before any project-dependent const, closes
-  // off this entire class of bug for good.
   if (!project) return <p className="text-[13px] text-gray-400 p-4">Loading project...</p>;
 
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
@@ -310,9 +345,6 @@ export default function ProjectDetailPage() {
       await runTopLevelCascade(updated);
       return;
     }
-    // Subtask: write its own change, then roll hours/status up into the parent
-    // and re-run the top-level cascade since the parent's derived hours may
-    // have shifted the schedule.
     await updateDoc(doc(db, "projects", id, "tasks", task.id), changes);
     const parent = tasks.find((t) => t.id === task.parentTaskId);
     if (!parent) return;
@@ -362,30 +394,31 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const moveTask = async (task, direction) => {
-    const siblings = task.parentTaskId
-      ? tasks.filter((t) => t.parentTaskId === task.parentTaskId).sort((a, b) => a.order - b.order)
-      : topLevelTasks.filter((t) => t.phase === task.phase).sort((a, b) => a.order - b.order);
-    const idx = siblings.findIndex((t) => t.id === task.id);
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= siblings.length) return;
-    const a = siblings[idx];
-    const b = siblings[swapIdx];
-    const batch = writeBatch(db);
-    batch.update(doc(db, "projects", id, "tasks", a.id), { order: b.order });
-    batch.update(doc(db, "projects", id, "tasks", b.id), { order: a.order });
-    await batch.commit();
-    if (!task.parentTaskId) {
-      const reordered = topLevelTasks.map((t) => {
-        if (t.id === a.id) return { ...t, order: b.order };
-        if (t.id === b.id) return { ...t, order: a.order };
-        return t;
-      }).sort((x, y) => x.order - y.order);
-      await runTopLevelCascade(reordered);
-    }
-  };
+  // Drag-and-drop reorder within a phase: remove dragged task, insert before
+  // drop target, then redistribute the existing order values to the new sequence.
+  const reorderTaskInPhase = async (draggedTask, targetTask) => {
+    if (draggedTask.id === targetTask.id || draggedTask.phase !== targetTask.phase) return;
+    const phase = draggedTask.phase;
+    const phaseTasks = topLevelTasks.filter((t) => t.phase === phase).sort((a, b) => a.order - b.order);
+    const existingOrders = phaseTasks.map((t) => t.order);
 
-  const [manualBaseline, setManualBaseline] = useState("");
+    const withoutDragged = phaseTasks.filter((t) => t.id !== draggedTask.id);
+    const targetIdx = withoutDragged.findIndex((t) => t.id === targetTask.id);
+    withoutDragged.splice(targetIdx, 0, draggedTask);
+
+    const batch = writeBatch(db);
+    withoutDragged.forEach((t, i) => {
+      batch.update(doc(db, "projects", id, "tasks", t.id), { order: existingOrders[i] });
+    });
+    await batch.commit();
+
+    const orderMap = {};
+    withoutDragged.forEach((t, i) => { orderMap[t.id] = existingOrders[i]; });
+    const allUpdated = topLevelTasks
+      .map((t) => (orderMap[t.id] !== undefined ? { ...t, order: orderMap[t.id] } : t))
+      .sort((a, b) => a.order - b.order);
+    await runTopLevelCascade(allUpdated);
+  };
 
   const toggleSelect = (taskId) => {
     setSelectedIds((prev) => {
@@ -471,9 +504,6 @@ export default function ProjectDetailPage() {
     await updateDoc(doc(db, "projects", id), { baselineStatus: "Pending Approval", proposedBaselineEndDate: dateToSubmit });
   };
   const approveBaseline = async () => {
-    // Approving the baseline is what graduates a project out of "Scoping" --
-    // per Sandy's direction, status stays Scoping by default until a baseline
-    // is locked, then normal status/health tracking (Planning onward) applies.
     await updateDoc(doc(db, "projects", id), {
       baselineStatus: "Locked",
       baselineEndDate: project.proposedBaselineEndDate,
@@ -487,10 +517,6 @@ export default function ProjectDetailPage() {
     setRejectComment("");
   };
 
-  // Post-lock guardrail: if the live computed schedule now runs past the
-  // locked (or last-approved-revised) baseline, flag it -- but never block
-  // adding/editing tasks. Resolving the slip requires a Deadline Change
-  // Request to the Approver; work continues regardless while it's pending.
   const effectiveLockedEnd = project.approvedRevisedEndDate || project.baselineEndDate;
   const isSlipping =
     project.baselineStatus === "Locked" &&
@@ -498,9 +524,6 @@ export default function ProjectDetailPage() {
     effectiveLockedEnd &&
     proposedBaseline > effectiveLockedEnd &&
     project.revisedDeadlineStatus !== "Pending Approval";
-
-  const [showRevisedReject, setShowRevisedReject] = useState(false);
-  const [revisedRejectComment, setRevisedRejectComment] = useState("");
 
   const submitDeadlineChangeRequest = async () => {
     await updateDoc(doc(db, "projects", id), {
@@ -523,22 +546,35 @@ export default function ProjectDetailPage() {
     setRevisedRejectComment("");
   };
 
-
   const phaseOrder = [];
   topLevelTasks.forEach((t) => { if (!phaseOrder.includes(t.phase)) phaseOrder.push(t.phase); });
 
   return (
     <div>
       <Link to="/projects" className="text-[11px] text-navy underline">← Back to Projects</Link>
-      <div className="flex items-start justify-between mt-2 mb-0.5">
+
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between mt-2 mb-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
             <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
             <span className="bg-violet-50 border-l-2 border-violet-300 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">{project.priority}</span>
+            {/* Status — pill dropdown */}
+            <select
+              value={project.status || "Scoping"}
+              onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
+              className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${projectStatusStyle(project.status || "Scoping")}`}
+            >
+              {Object.entries(PROJECT_STATUS_GROUPS).map(([group, options]) => (
+                <optgroup key={group} label={group}>
+                  {options.map((s) => <option key={s} value={s}>{s}</option>)}
+                </optgroup>
+              ))}
+            </select>
             <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>{health.label}</span>
           </div>
-          <p className="text-xs text-gray-500">{project.description}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{project.description}</p>
         </div>
         <div className="flex items-center gap-3">
           {project.folderUrl && (
@@ -547,69 +583,74 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4 text-[13px]">
-        <div className="bg-teal/5 rounded-lg shadow-sm border-2 border-teal/30 p-3">
-          <div className="text-[10px] text-teal-700 uppercase tracking-wide font-semibold">Completion</div>
-          <div className="text-2xl font-bold text-navy mt-1">{Math.round(projectCompletion)}%</div>
-          <div className="h-1.5 bg-white rounded-full overflow-hidden mt-1.5">
-            <div className="h-full bg-teal rounded-full" style={{ width: `${Math.round(projectCompletion)}%` }} />
+      {/* ── Project info — form fields ── */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 px-5 py-4 mb-4">
+        <div className="grid grid-cols-3 gap-x-10 gap-y-4 text-[12px]">
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Owner</div>
+            <div className="text-navy font-medium">{nameFor(project.ownerId)}</div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-slate-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Status</div>
-          <select
-            value={project.status || "Planning"}
-            onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
-            className="font-medium text-navy mt-1 bg-transparent border-none p-0 text-[13px] focus:outline-none"
-          >
-            {Object.entries(PROJECT_STATUS_GROUPS).map(([group, options]) => (
-              <optgroup key={group} label={group}>
-                {options.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-blue-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Owner</div>
-          <div className="font-medium text-navy mt-1">{nameFor(project.ownerId)}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-purple-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Approver</div>
-          <div className="font-medium text-navy mt-1">{nameFor(project.approverId)}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-emerald-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Work Type</div>
-          <div className="font-medium text-navy mt-1">{project.workTypeName}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-amber-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Delivery Format</div>
-          <div className="font-medium text-navy mt-1">{project.deliveryFormat || "—"}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-pink-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Training Type</div>
-          <div className="font-medium text-navy mt-1">{project.trainingType || "—"}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-cyan-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Development Type</div>
-          <div className="font-medium text-navy mt-1">{project.developmentType || "—"}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-orange-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Source</div>
-          <div className="font-medium text-navy mt-1">
-            {project.source}
-            {project.source === "Intake Request" && (
-              <div className="text-[11px] text-gray-400 font-normal">{project.requestorName} — {project.requestorDepartment}</div>
-            )}
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Approver</div>
+            <div className="text-navy font-medium">{nameFor(project.approverId)}</div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 border-l-2 border-l-teal-300 p-3">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Actual Completion</div>
-          <div className="font-medium text-navy mt-1">{project.actualCompletionDate || "—"}</div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Work Type</div>
+            <div className="text-navy font-medium">{project.workTypeName || "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Delivery Format</div>
+            <div className="text-navy font-medium">{project.deliveryFormat || "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Training Type</div>
+            <div className="text-navy font-medium">{project.trainingType || "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Development Type</div>
+            <div className="text-navy font-medium">{project.developmentType || "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Source</div>
+            <div className="text-navy font-medium">
+              {project.source || "—"}
+              {project.source === "Intake Request" && (
+                <div className="text-[11px] text-gray-400 font-normal">{project.requestorName} — {project.requestorDepartment}</div>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Est. Hours (total)</div>
+            <div className="text-navy font-medium">
+              {(() => {
+                const tot = topLevelTasks.reduce((s, t) => s + (childrenByParent[t.id]?.length ? childrenByParent[t.id].reduce((cs, c) => cs + (c.estimatedHours || 0), 0) : (t.estimatedHours || 0)), 0);
+                return tot ? `${tot} hrs` : "—";
+              })()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Actual Hours (total)</div>
+            <div className="text-navy font-medium">
+              {(() => {
+                const tot = topLevelTasks.reduce((s, t) => s + (childrenByParent[t.id]?.length ? childrenByParent[t.id].reduce((cs, c) => cs + (c.actualHours || 0), 0) : (t.actualHours || 0)), 0);
+                return tot ? `${tot} hrs` : "—";
+              })()}
+            </div>
+          </div>
+          <div className="col-span-3">
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Completion</div>
+            <div className="flex items-center gap-3">
+              <span className="text-navy font-bold text-lg">{Math.round(projectCompletion)}%</span>
+              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-teal rounded-full" style={{ width: `${Math.round(projectCompletion)}%` }} />
+              </div>
+              <span className="text-[11px] text-gray-400 whitespace-nowrap">{project.actualCompletionDate || "No completion date"}</span>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* ── Baseline deadline ── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5 mb-4">
         <div className="flex items-center justify-between">
           <div>
@@ -694,6 +735,7 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* ── Task list ── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-[13px] font-semibold text-navy font-heading">Task List — {project.workTypeName}</h3>
@@ -736,12 +778,20 @@ export default function ProjectDetailPage() {
               return (
                 <Fragment key={phase}>
                   <tr onClick={() => setCollapsedPhases((p) => ({ ...p, [phase]: !p[phase] }))} className={`cursor-pointer border-l-2 ${phaseColor(phaseIdx)}`}>
-                    <td colSpan={8} className="px-3 py-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase">
-                          {collapsed ? "▸" : "▾"} {phase}{" "}
-                          <span className="font-normal normal-case text-[10px] opacity-70">({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})</span>
-                        </span>
+                    <td colSpan={2} className="px-3 py-1.5">
+                      <span className="text-[13px] font-bold uppercase">
+                        {collapsed ? "▸" : "▾"} {phase}{" "}
+                        <span className="font-normal normal-case text-[11px] opacity-70">({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-[12px] font-semibold text-gray-600">
+                      {(() => { const sum = phaseTasks.reduce((s, t) => s + (childrenByParent[t.id]?.length ? childrenByParent[t.id].reduce((cs, c) => cs + (c.estimatedHours || 0), 0) : (t.estimatedHours || 0)), 0); return sum ? <span>{sum}<span className="text-[10px] text-gray-400 font-normal"> hrs</span></span> : "—"; })()}
+                    </td>
+                    <td className="px-3 py-1.5 text-[12px] font-semibold text-gray-600">
+                      {(() => { const sum = phaseTasks.reduce((s, t) => s + (childrenByParent[t.id]?.length ? childrenByParent[t.id].reduce((cs, c) => cs + (c.actualHours || 0), 0) : (t.actualHours || 0)), 0); return sum ? <span>{sum}<span className="text-[10px] text-gray-400 font-normal"> hrs</span></span> : "—"; })()}
+                    </td>
+                    <td colSpan={4} className="px-3 py-1.5">
+                      <div className="flex justify-end">
                         <ProgressBar pct={phaseCompletion[phase] || 0} />
                       </div>
                     </td>
@@ -758,16 +808,24 @@ export default function ProjectDetailPage() {
                         onCommit={commitTask}
                         onAddSubtask={addSubtask}
                         onDelete={deleteTask}
-                        onMove={moveTask}
                         onIndent={indentTask}
                         onOutdent={outdentTask}
                         expanded={!!expandedTasks[t.id]}
                         onToggleExpand={(taskId) => setExpandedTasks((p) => ({ ...p, [taskId]: !p[taskId] }))}
-                        isFirst={idx === 0}
-                        isLast={idx === phaseTasks.length - 1}
                         canIndent={idx > 0}
                         selectedIds={selectedIds}
                         onToggleSelect={toggleSelect}
+                        onDragStart={(task) => setDraggedTaskId(task.id)}
+                        onDragOver={(task) => setDragOverTaskId(task.id)}
+                        onDrop={(targetTask) => {
+                          const dragged = tasks.find((x) => x.id === draggedTaskId);
+                          if (dragged) reorderTaskInPhase(dragged, targetTask);
+                          setDraggedTaskId(null);
+                          setDragOverTaskId(null);
+                        }}
+                        onDragEnd={() => { setDraggedTaskId(null); setDragOverTaskId(null); }}
+                        isDraggedOver={dragOverTaskId === t.id && draggedTaskId !== t.id}
+                        isDragging={draggedTaskId === t.id}
                       />
                     ))}
                 </Fragment>

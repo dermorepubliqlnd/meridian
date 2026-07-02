@@ -10,6 +10,7 @@ import TasksPage from "./modules/tasks/pages/TasksPage";
 import ResourcesPage from "./modules/resources/pages/ResourcesPage";
 import ReportsPage from "./modules/reports/pages/ReportsPage";
 import UserManagementPage from "./modules/users/pages/UserManagementPage";
+import AdminSettingsPage from "./modules/admin/pages/AdminSettingsPage";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="users" element={<UserManagementPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
       </Route>
     </Routes>
   );

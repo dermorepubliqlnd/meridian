@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   collection,
   onSnapshot,
@@ -32,20 +32,21 @@ const DEFAULT_TRAINING_TYPES = [
 
 const DEFAULT_DELIVERY_FORMATS = ["Face-to-Face ILT", "Virtual ILT", "Blended", "E-Learning"];
 
+// Red asterisk for required labels
+function Req() {
+  return <span className="text-red-500 ml-0.5">*</span>;
+}
+
 export default function NewProjectPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
-  const [trainingTypes, addTrainingType] = useSettingsList("trainingTypes", DEFAULT_TRAINING_TYPES);
-  const [deliveryFormats, addDeliveryFormat] = useSettingsList(
-    "deliveryFormats",
-    DEFAULT_DELIVERY_FORMATS
-  );
-  const [newTrainingType, setNewTrainingType] = useState("");
-  const [newDeliveryFormat, setNewDeliveryFormat] = useState("");
+  const [trainingTypes] = useSettingsList("trainingTypes", DEFAULT_TRAINING_TYPES);
+  const [deliveryFormats] = useSettingsList("deliveryFormats", DEFAULT_DELIVERY_FORMATS);
 
   const [form, setForm] = useState({
     name: "",
+    ticketNumber: "",
     description: "",
     source: PROJECT_SOURCES[0],
     requestorName: "",
@@ -80,8 +81,6 @@ export default function NewProjectPage() {
     : selectedTemplate.phases;
   const totalTasks = effectivePhases.reduce((n, p) => n + p.tasks.length, 0);
 
-  // Smart-fill Delivery Format from Work Type, but only if the user hasn't
-  // manually touched that field yet.
   useEffect(() => {
     if (deliveryTouched) return;
     const suggested = WORK_TYPE_DELIVERY_DEFAULTS[form.templateId];
@@ -100,6 +99,9 @@ export default function NewProjectPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    if (!form.name.trim()) return setError("Project Name is required.");
+    if (!form.description.trim()) return setError("Description is required.");
+    if (!form.deliveryFormat) return setError("Please select a Delivery Format.");
     if (!form.ownerId) return setError("Please assign a Project Owner.");
     if (!form.approverId) return setError("Every project needs an Approver.");
     if (form.source === "Intake Request" && (!form.requestorName || !form.requestorDepartment)) {
@@ -112,6 +114,7 @@ export default function NewProjectPage() {
       const projectRef = await addDoc(collection(db, "projects"), {
         projectCode,
         name: form.name,
+        ticketNumber: form.ticketNumber.trim() || null,
         description: form.description,
         source: form.source,
         requestorName: form.source === "Intake Request" ? form.requestorName : null,
@@ -119,7 +122,7 @@ export default function NewProjectPage() {
         priority: form.priority,
         templateId: form.templateId,
         workTypeName: isLeap
-          ? `LEAP \u2014 ${["Learn", ...Object.entries(leapPhases).filter(([n, on]) => on && n !== "Learn").map(([n]) => n)].join(" + ")}`
+          ? `LEAP — ${["Learn", ...Object.entries(leapPhases).filter(([n, on]) => on && n !== "Learn").map(([n]) => n)].join(" + ")}`
           : selectedTemplate.name,
         trainingType: form.trainingType || null,
         developmentType: form.developmentType,
@@ -184,14 +187,18 @@ export default function NewProjectPage() {
       <h2 className="text-xl font-bold font-heading text-navy mb-0.5">New Project</h2>
       <p className="text-xs text-gray-500 mb-4">
         Task dates aren't set here — pick a Work Type to auto-generate the task list, then head to
-        the project page to assign owners and hours. Dates calculate from there.
+        the project page to assign owners and hours. Dates calculate from there.{" "}
+        <span className="text-red-400">* Required</span>
       </p>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* ── Left/main column ── */}
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-100 p-3.5 space-y-3">
+
+          {/* Row 1: Name + Priority */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-gray-500 mb-1 block">Project Name</label>
+              <label className="text-[11px] text-gray-500 mb-1 block">Project Name<Req /></label>
               <input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -200,48 +207,70 @@ export default function NewProjectPage() {
               />
             </div>
             <div>
-              <label className="text-[11px] text-gray-500 mb-1 block">Priority</label>
+              <label className="text-[11px] text-gray-500 mb-1 block">Priority<Req /></label>
               <select
                 value={form.priority}
                 onChange={(e) => setForm({ ...form, priority: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
               >
                 {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
+                  <option key={p} value={p}>{p}</option>
                 ))}
               </select>
             </div>
           </div>
 
+          {/* Ticket # (optional) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-gray-500 mb-1 block">Ticket # <span className="text-gray-400">(optional)</span></label>
+              <input
+                placeholder="e.g. REQ-2026-045"
+                value={form.ticketNumber}
+                onChange={(e) => setForm({ ...form, ticketNumber: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-500 mb-1 block">Project Folder URL <span className="text-gray-400">(optional)</span></label>
+              <input
+                type="url"
+                placeholder="https://..."
+                value={form.folderUrl}
+                onChange={(e) => setForm({ ...form, folderUrl: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
+              />
+            </div>
+          </div>
+
+          {/* Description */}
           <div>
-            <label className="text-[11px] text-gray-500 mb-1 block">Description</label>
+            <label className="text-[11px] text-gray-500 mb-1 block">Description<Req /></label>
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={2}
+              required
               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
             />
           </div>
 
+          {/* Source + Start Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-gray-500 mb-1 block">Project Source</label>
+              <label className="text-[11px] text-gray-500 mb-1 block">Project Source<Req /></label>
               <select
                 value={form.source}
                 onChange={(e) => setForm({ ...form, source: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
               >
                 {PROJECT_SOURCES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-gray-500 mb-1 block">Start Date</label>
+              <label className="text-[11px] text-gray-500 mb-1 block">Start Date<Req /></label>
               <input
                 type="date"
                 value={form.startDate}
@@ -252,10 +281,11 @@ export default function NewProjectPage() {
             </div>
           </div>
 
+          {/* Requestor fields (Intake Request only) */}
           {form.source === "Intake Request" && (
             <div className="grid grid-cols-2 gap-3 bg-slate-50 rounded-md p-2.5">
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">Requestor Name</label>
+                <label className="text-[11px] text-gray-500 mb-1 block">Requestor Name<Req /></label>
                 <input
                   value={form.requestorName}
                   onChange={(e) => setForm({ ...form, requestorName: e.target.value })}
@@ -264,7 +294,7 @@ export default function NewProjectPage() {
                 />
               </div>
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">Requestor Department</label>
+                <label className="text-[11px] text-gray-500 mb-1 block">Requestor Department<Req /></label>
                 <input
                   value={form.requestorDepartment}
                   onChange={(e) => setForm({ ...form, requestorDepartment: e.target.value })}
@@ -275,17 +305,16 @@ export default function NewProjectPage() {
             </div>
           )}
 
+          {/* Work Type */}
           <div>
-            <label className="text-[11px] text-gray-500 mb-1 block">L&D Work Type</label>
+            <label className="text-[11px] text-gray-500 mb-1 block">L&D Work Type<Req /></label>
             <select
               value={form.templateId}
               onChange={(e) => setForm({ ...form, templateId: e.target.value })}
               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
             >
               {WBS_TEMPLATES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
+                <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
             <p className="text-[11px] text-gray-400 mt-1">{selectedTemplate.description}</p>
@@ -305,16 +334,17 @@ export default function NewProjectPage() {
             )}
             {totalTasks > 0 && (
               <p className="text-[11px] text-teal-700 mt-1">
-                {totalTasks} tasks across {effectivePhases.length} phases will be
-                auto-generated. You can change Work Type later, but it won't regenerate the task
-                list once tasks have progress.
+                {totalTasks} tasks across {effectivePhases.length} phases will be auto-generated.
               </p>
             )}
           </div>
 
+          {/* Training Type + Delivery Format */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-gray-500 mb-1 block">Training Type</label>
+              <label className="text-[11px] text-gray-500 mb-1 block">
+                Training Type <span className="text-gray-400">(optional)</span>
+              </label>
               <select
                 value={form.trainingType}
                 onChange={(e) => setForm({ ...form, trainingType: e.target.value })}
@@ -322,34 +352,17 @@ export default function NewProjectPage() {
               >
                 <option value="">Select training type</option>
                 {trainingTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
+                  <option key={t} value={t}>{t}</option>
                 ))}
               </select>
-              <div className="flex gap-2 mt-1.5">
-                <input
-                  placeholder="Add new..."
-                  value={newTrainingType}
-                  onChange={(e) => setNewTrainingType(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-[11px]"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    addTrainingType(newTrainingType);
-                    setForm((f) => ({ ...f, trainingType: newTrainingType.trim() }));
-                    setNewTrainingType("");
-                  }}
-                  className="text-[11px] bg-slate-100 text-navy px-2 py-1 rounded-md hover:bg-slate-200"
-                >
-                  + Add
-                </button>
-              </div>
+              <p className="text-[10px] text-gray-400 mt-1">
+                Manage options in{" "}
+                <Link to="/settings" className="text-teal-700 underline">Admin Settings</Link>
+              </p>
             </div>
 
             <div>
-              <label className="text-[11px] text-gray-500 mb-1 block">Delivery Format</label>
+              <label className="text-[11px] text-gray-500 mb-1 block">Delivery Format<Req /></label>
               <select
                 value={form.deliveryFormat}
                 onChange={(e) => {
@@ -357,39 +370,23 @@ export default function NewProjectPage() {
                   setForm({ ...form, deliveryFormat: e.target.value });
                 }}
                 className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
+                required
               >
                 <option value="">Select delivery format</option>
                 {deliveryFormats.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
+                  <option key={d} value={d}>{d}</option>
                 ))}
               </select>
-              <div className="flex gap-2 mt-1.5">
-                <input
-                  placeholder="Add new..."
-                  value={newDeliveryFormat}
-                  onChange={(e) => setNewDeliveryFormat(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-[11px]"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    addDeliveryFormat(newDeliveryFormat);
-                    setDeliveryTouched(true);
-                    setForm((f) => ({ ...f, deliveryFormat: newDeliveryFormat.trim() }));
-                    setNewDeliveryFormat("");
-                  }}
-                  className="text-[11px] bg-slate-100 text-navy px-2 py-1 rounded-md hover:bg-slate-200"
-                >
-                  + Add
-                </button>
-              </div>
+              <p className="text-[10px] text-gray-400 mt-1">
+                Manage options in{" "}
+                <Link to="/settings" className="text-teal-700 underline">Admin Settings</Link>
+              </p>
             </div>
           </div>
 
+          {/* Effort / Development Type */}
           <div>
-            <label className="text-[11px] text-gray-500 mb-1 block">Development Type (Effort)</label>
+            <label className="text-[11px] text-gray-500 mb-1 block">Development Type (Effort)<Req /></label>
             <div className="grid grid-cols-3 gap-2">
               {DEVELOPMENT_TYPES.map((d) => (
                 <button
@@ -408,40 +405,28 @@ export default function NewProjectPage() {
               ))}
             </div>
           </div>
-
-          <div>
-            <label className="text-[11px] text-gray-500 mb-1 block">Project Folder URL (optional)</label>
-            <input
-              type="url"
-              placeholder="https://..."
-              value={form.folderUrl}
-              onChange={(e) => setForm({ ...form, folderUrl: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
-            />
-          </div>
         </div>
 
+        {/* ── Right column — Owner, Approver, Team ── */}
         <div className="lg:col-span-1 space-y-3">
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
-            <label className="text-[11px] text-gray-500 mb-1 block">Project Owner</label>
+            <label className="text-[11px] text-gray-500 mb-1 block">Project Owner<Req /></label>
             <select
               value={form.ownerId}
               onChange={(e) => setForm({ ...form, ownerId: e.target.value })}
               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
               required
             >
-              <option value="" disabled>
-                Select Project Owner
-              </option>
+              <option value="" disabled>Select Project Owner</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name} {u.jobTitle ? `— ${u.jobTitle}` : ""}
+                  {u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}
                 </option>
               ))}
             </select>
 
             <label className="text-[11px] text-gray-500 mb-1 block mt-3">
-              Project Approver <span className="text-red-500">(required)</span>
+              Project Approver<Req />
             </label>
             <select
               value={form.approverId}
@@ -449,39 +434,37 @@ export default function NewProjectPage() {
               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
               required
             >
-              <option value="" disabled>
-                Select Approver
-              </option>
+              <option value="" disabled>Select Approver</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name} {u.jobTitle ? `— ${u.jobTitle}` : ""}
+                  {u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}
                 </option>
               ))}
             </select>
             <p className="text-[11px] text-gray-400 mt-1">
-              Approver signs off on the baseline deadline and deadline change requests. Doesn't
-              have to be the Owner.
+              Approver signs off on the baseline deadline and deadline change requests. Must be a different person from the Owner.
             </p>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5">
-            <label className="text-[11px] text-gray-500 mb-2 block">Team Members (Contributors)</label>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {users.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 text-[13px] py-0.5">
-                  <input
-                    type="checkbox"
-                    checked={form.memberIds.includes(u.id)}
-                    onChange={() => toggleMember(u.id)}
-                  />
-                  {u.name}
-                </label>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-2">
-              Invite-only — only people checked here (plus Owner and Approver) can see this
-              project.
+            <label className="text-[11px] text-gray-500 mb-2 block">Team Members</label>
+            <p className="text-[11px] text-gray-400 mb-2">
+              Add people who will work on this project. Owner and Approver are included automatically.
             </p>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {users
+                .filter((u) => u.id !== form.ownerId && u.id !== form.approverId)
+                .map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 text-[13px] py-0.5">
+                    <input
+                      type="checkbox"
+                      checked={form.memberIds.includes(u.id)}
+                      onChange={() => toggleMember(u.id)}
+                    />
+                    {u.name}{u.jobTitle ? <span className="text-gray-400 text-[11px]"> — {u.jobTitle}</span> : ""}
+                  </label>
+                ))}
+            </div>
           </div>
 
           {error && <p className="text-[11px] text-red-500">{error}</p>}

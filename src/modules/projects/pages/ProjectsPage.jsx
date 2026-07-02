@@ -8,15 +8,13 @@ import { computeRollups } from "../../../lib/completion";
 
 const STORAGE_KEY = "meridian.projectsTable.v1";
 
-// All project-setting/detail/health/status fields EXCEPT Requestor Name and
-// Team Members, per Sandy's request (2026-07-01) to keep this list lean while
-// still surfacing everything else for ad hoc reporting.
 const COLUMN_DEFS = [
   { key: "projectCode", label: "Code", width: 90 },
   { key: "name", label: "Project Name", width: 220 },
   { key: "description", label: "Description", width: 240 },
   { key: "source", label: "Source", width: 130 },
   { key: "requestorDepartment", label: "Requestor Dept.", width: 140 },
+  { key: "ticketNumber", label: "Ticket #", width: 110 },
   { key: "priority", label: "Priority", width: 100 },
   { key: "startDate", label: "Start Date", width: 110 },
   { key: "workTypeName", label: "Work Type", width: 170 },
@@ -49,6 +47,60 @@ const DEFAULT_VISIBLE = new Set([
 
 const PRIORITY_RANK = { Low: 0, Medium: 1, High: 2 };
 
+// ── Color maps ──────────────────────────────────────────────────────────────
+const PRIORITY_PILL = {
+  Low:    "bg-emerald-100 text-emerald-700",
+  Medium: "bg-amber-100 text-amber-700",
+  High:   "bg-red-100 text-red-700",
+};
+
+const EFFORT_PILL = {
+  "Level 1": "bg-emerald-100 text-emerald-700",
+  "Level 2": "bg-amber-100 text-amber-700",
+  "Level 3": "bg-red-100 text-red-700",
+};
+
+// Notion-inspired status colors — grouped by workflow stage
+const STATUS_PILL = {
+  Scoping:     "bg-violet-100 text-violet-700",
+  Backlog:     "bg-gray-100 text-gray-500",
+  Queued:      "bg-slate-100 text-slate-600",
+  Planning:    "bg-yellow-100 text-yellow-700",
+  Design:      "bg-blue-100 text-blue-700",
+  Development: "bg-orange-100 text-orange-700",
+  Delivery:    "bg-green-100 text-green-700",
+  Evaluation:  "bg-teal-100 text-teal-700",
+  Paused:      "bg-amber-100 text-amber-600",
+  Done:        "bg-emerald-100 text-emerald-700",
+  Canceled:    "bg-red-100 text-red-600",
+  Merged:      "bg-gray-100 text-gray-500",
+};
+
+// Group header accent colors (left border + bg tint) keyed by status/health label
+const GROUP_HEADER_ACCENT = {
+  // Status groups
+  Scoping:               "border-l-4 border-violet-400 bg-violet-50/60",
+  Backlog:               "border-l-4 border-gray-300 bg-gray-50",
+  Queued:                "border-l-4 border-slate-300 bg-slate-50",
+  Planning:              "border-l-4 border-yellow-400 bg-yellow-50/60",
+  Design:                "border-l-4 border-blue-400 bg-blue-50/60",
+  Development:           "border-l-4 border-orange-400 bg-orange-50/60",
+  Delivery:              "border-l-4 border-green-400 bg-green-50/60",
+  Evaluation:            "border-l-4 border-teal-400 bg-teal-50/60",
+  Paused:                "border-l-4 border-amber-400 bg-amber-50/60",
+  Done:                  "border-l-4 border-emerald-400 bg-emerald-50/60",
+  Canceled:              "border-l-4 border-red-300 bg-red-50/60",
+  Merged:                "border-l-4 border-gray-300 bg-gray-50",
+  // Health labels
+  "On Track":            "border-l-4 border-emerald-400 bg-emerald-50/60",
+  "At Risk":             "border-l-4 border-orange-400 bg-orange-50/60",
+  "Behind Schedule":     "border-l-4 border-red-400 bg-red-50/60",
+  "Delayed — Near Completion": "border-l-4 border-orange-300 bg-orange-50/40",
+  "Status Not Updated":  "border-l-4 border-amber-400 bg-amber-50/60",
+  "Not Started":         "border-l-4 border-gray-300 bg-gray-50",
+};
+const GROUP_HEADER_DEFAULT = "border-l-4 border-navy/20 bg-slate-50";
+
 function loadTableState() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -77,18 +129,12 @@ function loadTableState() {
 function cellValue(key, ctx) {
   const { p, health, completionPct, nameFor } = ctx;
   switch (key) {
-    case "ownerId":
-      return nameFor(p.ownerId);
-    case "approverId":
-      return nameFor(p.approverId);
-    case "completion":
-      return Math.round(completionPct);
-    case "health":
-      return health.label;
-    case "priority":
-      return PRIORITY_RANK[p.priority] ?? -1;
-    default:
-      return p[key] ?? "";
+    case "ownerId":    return nameFor(p.ownerId);
+    case "approverId": return nameFor(p.approverId);
+    case "completion": return Math.round(completionPct);
+    case "health":     return health.label;
+    case "priority":   return PRIORITY_RANK[p.priority] ?? -1;
+    default:           return p[key] ?? "";
   }
 }
 
@@ -106,14 +152,25 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor }) {
           {p.description || "—"}
         </span>
       );
-    case "ownerId":
-      return <span className="text-gray-600">{nameFor(p.ownerId)}</span>;
-    case "approverId":
-      return <span className="text-gray-600">{nameFor(p.approverId)}</span>;
-    case "completion":
-      return <span className="text-gray-600">{Math.round(completionPct)}%</span>;
-    case "status":
-      return <span className="text-gray-500 text-[11px]">{p.status || "Scoping"}</span>;
+    case "ownerId":    return <span className="text-gray-600">{nameFor(p.ownerId)}</span>;
+    case "approverId": return <span className="text-gray-600">{nameFor(p.approverId)}</span>;
+    case "completion": return <span className="text-gray-600">{Math.round(completionPct)}%</span>;
+
+    case "priority": {
+      const cls = PRIORITY_PILL[p.priority] || "bg-gray-100 text-gray-500";
+      return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{p.priority || "—"}</span>;
+    }
+    case "developmentType": {
+      // Extract "Level N" from the stored value like "Level 1"
+      const lvl = p.developmentType || "";
+      const cls = EFFORT_PILL[lvl] || "bg-gray-100 text-gray-500";
+      return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{lvl || "—"}</span>;
+    }
+    case "status": {
+      const s = p.status || "Scoping";
+      const cls = STATUS_PILL[s] || "bg-gray-100 text-gray-500";
+      return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{s}</span>;
+    }
     case "health":
       return (
         <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>{health.label}</span>
@@ -126,9 +183,7 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor }) {
       );
     case "folderUrl":
       return p.folderUrl ? (
-        <a href={p.folderUrl} target="_blank" rel="noreferrer" className="text-teal-700 hover:underline">
-          Open ↗
-        </a>
+        <a href={p.folderUrl} target="_blank" rel="noreferrer" className="text-teal-700 hover:underline">Open ↗</a>
       ) : (
         <span className="text-gray-400">—</span>
       );
@@ -155,10 +210,9 @@ export default function ProjectsPage() {
     });
 
     const projRef = collection(db, "projects");
-    const q =
-      profile?.role === "Admin"
-        ? projRef
-        : query(projRef, where("memberIds", "array-contains", user.uid));
+    const q = profile?.role === "Admin"
+      ? projRef
+      : query(projRef, where("memberIds", "array-contains", user.uid));
 
     const unsubProjects = onSnapshot(q, (snap) => {
       setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -173,11 +227,7 @@ export default function ProjectsPage() {
       setTasksByProject(grouped);
     });
 
-    return () => {
-      unsubUsers();
-      unsubProjects();
-      unsubTasks();
-    };
+    return () => { unsubUsers(); unsubProjects(); unsubTasks(); };
   }, [user, profile]);
 
   useEffect(() => {
@@ -306,7 +356,7 @@ export default function ProjectsPage() {
         </Link>
       </div>
       <p className="text-xs text-gray-500 mb-3">
-        Drag column headers to reorder, drag the right edge to resize, click a header to sort.
+        Click a header to sort · drag header to reorder columns · drag right edge to resize · use Columns to show/hide.
       </p>
 
       <div className="flex items-center gap-2 mb-3 relative">
@@ -351,6 +401,7 @@ export default function ProjectsPage() {
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-x-auto">
         <div style={{ minWidth: "max-content" }}>
+          {/* Column headers */}
           <div
             className="grid bg-slate-50 text-[10px] text-gray-400 uppercase tracking-wide font-medium border-b border-gray-100"
             style={{ gridTemplateColumns: gridTemplate }}
@@ -366,7 +417,7 @@ export default function ProjectsPage() {
                   onDrop={handleDrop(key)}
                   onClick={() => toggleSort(key)}
                   className="relative px-3 py-2 cursor-pointer select-none flex items-center gap-1 hover:bg-slate-100 border-r border-gray-100 last:border-r-0"
-                  title="Click to sort, drag to reorder"
+                  title="Click to sort · drag to reorder · drag right edge to resize"
                 >
                   <span className="truncate">{col.label}</span>
                   {table.sortKey === key && <span>{table.sortDir === "asc" ? "▲" : "▼"}</span>}
@@ -380,11 +431,15 @@ export default function ProjectsPage() {
             })}
           </div>
 
+          {/* Rows */}
           {groups.map((group) => (
             <div key={group.label ?? "all"}>
               {group.label !== null && (
-                <div className="px-3 py-1.5 bg-slate-100/70 text-[11px] font-semibold text-navy border-b border-gray-100">
-                  {group.label} <span className="text-gray-400 font-normal">({group.rows.length})</span>
+                <div
+                  className={`px-3 py-1.5 text-[12px] font-semibold text-navy border-b border-gray-100 ${GROUP_HEADER_ACCENT[group.label] || GROUP_HEADER_DEFAULT}`}
+                >
+                  {group.label}{" "}
+                  <span className="text-gray-400 font-normal text-[11px]">({group.rows.length})</span>
                 </div>
               )}
               {group.rows.map(({ p, health, completionPct }) => (
