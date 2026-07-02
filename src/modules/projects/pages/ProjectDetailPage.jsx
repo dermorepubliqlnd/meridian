@@ -11,6 +11,7 @@ import {
   addDoc,
   deleteDoc,
   getDocs,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { computeSchedule } from "../../../lib/scheduling";
@@ -270,6 +271,66 @@ function AddTaskRow({ onCancel, onAdd }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+
+// ── Team Member Manager ───────────────────────────────────────────────────────
+function TeamMemberManager({ projectId, memberIds, ownerId, approverId, allUsers }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const eligible = allUsers.filter(
+    (u) => u.id !== ownerId && u.id !== approverId && !memberIds.includes(u.id)
+  );
+
+  const addMember = async (uid) => {
+    setSaving(true);
+    await updateDoc(doc(db, "projects", projectId), { memberIds: arrayUnion(uid) });
+    setSaving(false);
+    setOpen(false);
+  };
+
+  if (eligible.length === 0 && !open) return (
+    <span className="text-[11px] text-gray-400 italic">All users already added.</span>
+  );
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="text-[11px] text-teal-700 border border-teal-200 bg-teal-50 rounded-md px-2.5 py-1 hover:bg-teal-100"
+      >
+        + Add member
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-8 z-40 bg-white shadow-xl border border-gray-200 rounded-lg py-1 w-52 max-h-64 overflow-y-auto">
+            <div className="px-3 py-1.5 text-[10px] text-gray-400 uppercase tracking-wide border-b border-gray-100">Add team member</div>
+            {eligible.length === 0 && (
+              <p className="px-3 py-2 text-[12px] text-gray-400 italic">No more users to add.</p>
+            )}
+            {eligible.map((u) => (
+              <button
+                key={u.id}
+                disabled={saving}
+                onClick={() => addMember(u.id)}
+                className="w-full text-left px-3 py-2 text-[12px] text-gray-700 hover:bg-slate-50 flex items-center gap-2"
+              >
+                <div className="w-5 h-5 rounded-full bg-navy/20 text-navy text-[9px] font-bold flex items-center justify-center shrink-0">
+                  {u.name?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate">{u.name}</div>
+                  {u.jobTitle && <div className="text-[10px] text-gray-400 truncate">{u.jobTitle}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -666,6 +727,45 @@ export default function ProjectDetailPage() {
               <span className="text-[11px] text-gray-400 whitespace-nowrap">{project.actualCompletionDate || "No completion date"}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── Team Members ── */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[12px] font-semibold text-gray-500 uppercase tracking-wide">Team Members</h3>
+          {(isOwner || profile?.role === "Admin") && (
+            <TeamMemberManager
+              projectId={id}
+              memberIds={project.memberIds || []}
+              ownerId={project.ownerId}
+              approverId={project.approverId}
+              allUsers={users}
+            />
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {members.length === 0 && <span className="text-[12px] text-gray-400 italic">No additional team members.</span>}
+          {members.map((m) => {
+            const initials = m.name?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+            const isCore = m.id === project.ownerId || m.id === project.approverId;
+            return (
+              <div key={m.id} className="flex items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-full px-2.5 py-1">
+                <div className="w-5 h-5 rounded-full bg-navy text-white text-[9px] font-bold flex items-center justify-center">{initials}</div>
+                <span className="text-[12px] text-gray-700">{m.name}</span>
+                {isCore && <span className="text-[9px] text-gray-400">{m.id === project.ownerId ? "Owner" : "Approver"}</span>}
+                {!isCore && (isOwner || profile?.role === "Admin") && (
+                  <button
+                    onClick={async () => {
+                      const updated = (project.memberIds || []).filter((uid) => uid !== m.id);
+                      await updateDoc(doc(db, "projects", id), { memberIds: updated });
+                    }}
+                    className="text-gray-300 hover:text-red-400 text-[10px] ml-0.5"
+                  >✕</button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -43,6 +43,7 @@ export default function NewProjectPage() {
   const [users, setUsers] = useState([]);
   const [trainingTypes] = useSettingsList("trainingTypes", DEFAULT_TRAINING_TYPES);
   const [deliveryFormats] = useSettingsList("deliveryFormats", DEFAULT_DELIVERY_FORMATS);
+  const [departments] = useSettingsList("departments", ["Finance","Human Resources","Information Technology","Learning & Development","Marketing","Operations","Production","Quality Assurance","Sales","Supply Chain","Warehouse"]);
 
   const [form, setForm] = useState({
     name: "",
@@ -295,12 +296,15 @@ export default function NewProjectPage() {
               </div>
               <div>
                 <label className="text-[11px] text-gray-500 mb-1 block">Requestor Department<Req /></label>
-                <input
+                <select
                   value={form.requestorDepartment}
                   onChange={(e) => setForm({ ...form, requestorDepartment: e.target.value })}
                   className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal"
                   required
-                />
+                >
+                  <option value="">Select department…</option>
+                  {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
               </div>
             </div>
           )}
