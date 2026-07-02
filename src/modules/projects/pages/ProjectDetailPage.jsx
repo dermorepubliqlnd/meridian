@@ -770,32 +770,44 @@ export default function ProjectDetailPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between mt-2 mb-3">
         <div>
+          {/* Title row */}
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
             <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
             <span className="bg-violet-50 border-l-2 border-violet-300 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">{project.priority}</span>
-            {/* Status — lifecycle dropdown */}
-            <select
-              value={PROJECT_STATUSES.includes(project.status) ? project.status : "Active"}
-              onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
-              className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${STATUS_STYLES[project.status] || STATUS_STYLES["Active"]}`}
-            >
-              {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {/* Phase — ADDIE stage dropdown */}
-            <select
-              value={PROJECT_PHASES.includes(project.phase) ? project.phase : "Scoping"}
-              onChange={(e) => updateDoc(doc(db, "projects", id), { phase: e.target.value })}
-              className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${PHASE_STYLES[project.phase] || PHASE_STYLES["Scoping"]}`}
-            >
-              {PROJECT_PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            {/* Health RAG badge */}
-            <span className="text-[10px] text-gray-400 mr-0.5">Health:</span>
-            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${health.style}`}>
-              {health.label}
-              {health.isOverridden && <span className="ml-1 text-[9px] opacity-70">(manual)</span>}
-            </span>
+          </div>
+          {/* Status / Phase / Health pill row with labels */}
+          <div className="flex items-end gap-4 mt-2 flex-wrap">
+            {/* Status */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Status</span>
+              <select
+                value={PROJECT_STATUSES.includes(project.status) ? project.status : "Active"}
+                onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
+                className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${STATUS_STYLES[project.status] || STATUS_STYLES["Active"]}`}
+              >
+                {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            {/* Phase */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Phase</span>
+              <select
+                value={PROJECT_PHASES.includes(project.phase) ? project.phase : "Scoping"}
+                onChange={(e) => updateDoc(doc(db, "projects", id), { phase: e.target.value })}
+                className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${PHASE_STYLES[project.phase] || PHASE_STYLES["Scoping"]}`}
+              >
+                {PROJECT_PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            {/* Health */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Health</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${health.style}`}>
+                {health.label}
+                {health.isOverridden && <span className="ml-1 text-[9px] opacity-70">(manual)</span>}
+              </span>
+            </div>
             {(isOwner || isAdmin) && health.rag !== "grey" && (
               <button
                 onClick={() => {
