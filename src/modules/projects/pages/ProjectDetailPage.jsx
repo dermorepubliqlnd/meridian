@@ -1431,7 +1431,11 @@ export default function ProjectDetailPage() {
                     setNoteSaving(true);
                     setNoteError("");
                     try {
-                      await updateDoc(doc(db, "projects", id, "tasks", notePanel.taskId), { notes: notePanel.note.trim() || null });
+                      const savedNote = notePanel.note.trim() || null;
+                      const savedTaskId = notePanel.taskId;
+                      await updateDoc(doc(db, "projects", id, "tasks", savedTaskId), { notes: savedNote });
+                      // Optimistic update so bubble appears immediately without waiting for onSnapshot
+                      setTasks((prev) => prev.map((t) => t.id === savedTaskId ? { ...t, notes: savedNote } : t));
                       setNotePanel(null);
                       setToast("Note saved.");
                       setTimeout(() => setToast(""), 2500);
