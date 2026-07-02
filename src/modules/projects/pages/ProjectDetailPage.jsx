@@ -114,13 +114,9 @@ function TaskRow({
                 {depth === 0 && (
                   <button onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-teal-600 hover:text-teal-700 font-bold text-[13px] px-0.5 leading-none flex-shrink-0" title="Add subtask">+</button>
                 )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onToggleNote(task.id); }}
-                  className={`opacity-0 group-hover:opacity-100 transition-opacity text-[11px] px-0.5 flex-shrink-0 ${task.notes ? "text-amber-500 opacity-100" : "text-gray-400 hover:text-gray-600"}`}
-                  title={task.notes ? "View/edit note" : "Add note"}
-                >
-                  {task.notes ? "📝" : "🗒"}
-                </button>
+                {task.notes && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" title="Has note" />
+                )}
               </div>
               {/* Indent / Outdent — only shown when row is selected */}
               {selected && (
@@ -431,6 +427,8 @@ export default function ProjectDetailPage() {
   const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [newNote, setNewNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+  const [notePanel, setNotePanel] = useState(null); // { taskId, taskName, note }
+  const [projectNotePanel, setProjectNotePanel] = useState(false);
 
   const [trainingTypes] = useSettingsList("trainingTypes", []);
   const [deliveryFormats] = useSettingsList("deliveryFormats", []);
@@ -817,16 +815,23 @@ export default function ProjectDetailPage() {
       {/* ── Project info — form fields ── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 px-5 py-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Project Details</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Project Details</span>
+            <button
+              onClick={() => setProjectNotePanel(true)}
+              className="text-[10px] text-teal-600 hover:text-teal-800 border border-teal-200 bg-teal-50 rounded-full px-2 py-0.5 hover:bg-teal-100"
+            >
+              Notes & Activity
+            </button>
+          </div>
           {(isOwner || profile?.role === "Admin") && (
             <button
-              onClick={openEditProject}
+              onClick={() => navigate(`/projects/${id}/edit`)}
               className="text-gray-400 hover:text-navy transition p-1 rounded hover:bg-gray-100"
               title="Edit project settings"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9"/>
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5z"/><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65z"/>
               </svg>
             </button>
           )}
@@ -1175,6 +1180,13 @@ export default function ProjectDetailPage() {
             onClick={() => { addSubtask(contextMenu.task); setContextMenu(null); }}>
             + Add subtask
           </button>
+          <button className="w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-slate-50"
+            onClick={() => {
+              setNotePanel({ taskId: contextMenu.task.id, taskName: contextMenu.task.name, note: contextMenu.task.notes || "" });
+              setContextMenu(null);
+            }}>
+            {contextMenu.task.notes ? "📝 View/Edit Note" : "🗒 Add Note"}
+          </button>
           <div className="border-t border-gray-100 my-0.5" />
           <button className="w-full text-left px-3 py-1.5 text-[12px] text-red-500 hover:bg-red-50"
             onClick={() => { deleteTask(contextMenu.task); setContextMenu(null); }}>
@@ -1276,8 +1288,113 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* ── Activity Log & Notes ── */}
-      <ActivityLog projectId={id} user={user} users={users} newNote={newNote} setNewNote={setNewNote} addNote={addNote} savingNote={savingNote} />
+      {/* ── Task Note Side Panel ── */}
+      {notePanel && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setNotePanel(null)} />
+          <div className="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide">Task Note</div>
+                <div className="text-[13px] font-semibold text-navy truncate max-w-[220px]">{notePanel.taskName}</div>
+              </div>
+              <button onClick={() => setNotePanel(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <div className="flex-1 p-4 flex flex-col gap-3">
+              <textarea
+                autoFocus
+                value={notePanel.note}
+                onChange={(e) => setNotePanel({ ...notePanel, note: e.target.value })}
+                placeholder="Add a note, link, or context…"
+                rows={6}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    await updateDoc(doc(db, "projects", id, "tasks", notePanel.taskId), { notes: notePanel.note.trim() || null });
+                    setNotePanel(null);
+                  }}
+                  className="flex-1 bg-navy text-white rounded-md py-1.5 text-[12px] font-medium"
+                >Save Note</button>
+                <button onClick={() => setNotePanel(null)} className="px-3 py-1.5 text-[12px] border border-gray-300 rounded-md text-gray-600">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Project Notes Side Panel ── */}
+      {projectNotePanel && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setProjectNotePanel(false)} />
+          <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide">Notes & Activity</div>
+                <div className="text-[13px] font-semibold text-navy truncate max-w-[280px]">{project.name}</div>
+              </div>
+              <button onClick={() => setProjectNotePanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+              <div className="flex gap-2">
+                <textarea
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addNote(); } }}
+                  placeholder="Add a note… (Enter to post)"
+                  rows={2}
+                  className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal resize-none"
+                />
+                <button onClick={addNote} disabled={savingNote || !newNote.trim()} className="px-3 py-1.5 text-[12px] bg-navy text-white rounded-md self-end disabled:opacity-40">Post</button>
+              </div>
+            </div>
+            <ProjectActivityFeed projectId={id} users={users} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProjectActivityFeed({ projectId, users }) {
+  const [log, setLog] = useState([]);
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(db, "projects", projectId, "activity"), orderBy("createdAt", "desc")),
+      (snap) => setLog(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return unsub;
+  }, [projectId]);
+
+  const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "Someone";
+  const fmt = (ts) => {
+    if (!ts) return "";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      {log.length === 0 && <p className="text-[12px] text-gray-400 italic">No notes yet.</p>}
+      {log.map((entry) => (
+        <div key={entry.id} className={`text-[12px] ${entry.type === "note" ? "bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5" : "text-gray-400 border-l-2 border-gray-200 pl-2"}`}>
+          {entry.type === "note" ? (
+            <>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-5 h-5 rounded-full bg-navy text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                  {nameFor(entry.uid).split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
+                </div>
+                <span className="font-medium text-navy">{nameFor(entry.uid)}</span>
+                <span className="text-gray-400 text-[10px] ml-auto">{fmt(entry.createdAt)}</span>
+              </div>
+              <p className="text-gray-700 text-[12px] leading-relaxed">{entry.message}</p>
+            </>
+          ) : (
+            <p className="text-[11px]">🔧 {entry.message} · <span>{fmt(entry.createdAt)}</span></p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

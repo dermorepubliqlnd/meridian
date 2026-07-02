@@ -6,6 +6,7 @@ import AppLayout from "./components/AppLayout";
 import ProjectsPage from "./modules/projects/pages/ProjectsPage";
 import NewProjectPage from "./modules/projects/pages/NewProjectPage";
 import ProjectDetailPage from "./modules/projects/pages/ProjectDetailPage";
+import ProjectEditPage from "./modules/projects/pages/ProjectEditPage";
 import TasksPage from "./modules/tasks/pages/TasksPage";
 import ResourcesPage from "./modules/resources/pages/ResourcesPage";
 import ReportsPage from "./modules/reports/pages/ReportsPage";
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/new" element={<NewProjectPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
+        <Route path="projects/:id/edit" element={<ProjectEditPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="reports" element={<ReportsPage />} />

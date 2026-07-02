@@ -171,6 +171,44 @@ export default function UserManagementPage() {
     );
   }
 
+  const handleDeactivate = async (targetUser) => {
+    const reactivating = targetUser.isActive === false;
+    if (!reactivating && !window.confirm(
+      `Deactivate ${targetUser.name}? Their owned projects will be transferred to an Admin automatically.`
+    )) return;
+
+    // Toggle active state
+    await updateDoc(doc(db, "users", targetUser.id), { isActive: reactivating ? true : false });
+
+    if (!reactivating) {
+      // Find an admin to transfer to (first admin that isn't this user)
+      const adminUser = users.find((u) => u.role === "Admin" && u.id !== targetUser.id);
+      if (!adminUser) return;
+
+      // Find all projects where this user is owner
+      const projSnap = await getDocs(
+        query(collection(db, "projects"), where("ownerId", "==", targetUser.id))
+      );
+      if (projSnap.empty) return;
+
+      const batch = writeBatch(db);
+      projSnap.docs.forEach((pDoc) => {
+        batch.update(pDoc.ref, { ownerId: adminUser.id });
+      });
+      await batch.commit();
+
+      // Log to each project's activity feed
+      for (const pDoc of projSnap.docs) {
+        await addDoc(collection(db, "projects", pDoc.id, "activity"), {
+          type: "ownership_transfer",
+          message: `Ownership transferred from ${targetUser.name} to ${adminUser.name} — ${targetUser.name} was deactivated.`,
+          uid: profile?.uid || "system",
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
+  };
+
   return (
     <div>
       <h2 className="text-xl font-bold font-heading text-navy mb-0.5">User Management</h2>
@@ -296,7 +334,10 @@ export default function UserManagementPage() {
                 ) : (
                   <tr key={u.id} className="border-t border-gray-100 hover:bg-slate-50/50">
                     <td className="px-3 py-2">
-                      <div>{u.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={u.isActive === false ? "text-gray-400 line-through" : ""}>{u.name}</span>
+                        {u.isActive === false && <span className="text-[10px] bg-red-100 text-red-600 rounded px-1">Inactive</span>}
+                      </div>
                       <div className="text-xs text-gray-400">{u.email}</div>
                     </td>
                     <td className="px-3 py-2 text-gray-600">{u.jobTitle || "—"}</td>
@@ -309,12 +350,22 @@ export default function UserManagementPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      <button
-                        onClick={() => setEditingId(u.id)}
-                        className="text-xs text-navy underline"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEditingId(u.id)}
+                          className="text-xs text-navy underline"
+                        >
+                          Edit
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeactivate(u)}
+                            className={`text-xs underline ${u.isActive === false ? "text-teal-600" : "text-red-400"}`}
+                          >
+                            {u.isActive === false ? "Reactivate" : "Deactivate"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
