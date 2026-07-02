@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
+  sendPasswordResetEmail,
   OAuthProvider,
 } from "firebase/auth";
 import { auth } from "../lib/firebase";
@@ -11,7 +12,9 @@ import GlobeMark from "../components/GlobeMark";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
 
   const handleEmailLogin = async (e) => {
@@ -25,11 +28,24 @@ export default function Login() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError("Enter your email address above first.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleMicrosoftLogin = async () => {
     setError("");
     try {
       const provider = new OAuthProvider("microsoft.com");
-      // provider.setCustomParameters({ tenant: "YOUR_TENANT_ID" }); // set once Azure AD app is registered
       await signInWithPopup(auth, provider);
       navigate("/");
     } catch (err) {
@@ -48,6 +64,8 @@ export default function Login() {
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <input
+            id="email"
+            name="email"
             type="email"
             placeholder="Email"
             value={email}
@@ -55,15 +73,30 @@ export default function Login() {
             className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
             required
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-            required
-          />
+          <div className="relative">
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+              tabIndex={-1}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+
           {error && <p className="text-red-500 text-xs">{error}</p>}
+          {resetSent && <p className="text-green-600 text-xs">Password reset email sent — check your inbox.</p>}
+
           <button
             type="submit"
             className="w-full bg-navy text-white rounded-md py-2 text-sm font-medium hover:bg-navy-light transition"
@@ -71,6 +104,16 @@ export default function Login() {
             Sign in
           </button>
         </form>
+
+        <div className="text-center mt-2">
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            className="text-xs text-teal-600 hover:underline"
+          >
+            Forgot password?
+          </button>
+        </div>
 
         <div className="my-4 flex items-center gap-2">
           <div className="h-px bg-gray-200 flex-1" />
