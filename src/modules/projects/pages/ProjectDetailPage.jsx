@@ -781,10 +781,9 @@ export default function ProjectDetailPage() {
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
             <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
             <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${{
-              Critical: "bg-red-50 text-red-700 border-red-200",
-              High:     "bg-orange-50 text-orange-700 border-orange-200",
-              Medium:   "bg-yellow-50 text-yellow-700 border-yellow-200",
-              Low:      "bg-gray-100 text-gray-500 border-gray-200",
+              High:   "bg-red-50 text-red-700 border-red-200",
+              Medium: "bg-yellow-50 text-yellow-700 border-yellow-200",
+              Low:    "bg-emerald-50 text-emerald-700 border-emerald-200",
             }[project.priority] || "bg-gray-100 text-gray-500 border-gray-200"}`}>{project.priority}</span>
           </div>
           {project.description && <p className="text-[12px] text-gray-500 mt-1 mb-0.5">{project.description}</p>}

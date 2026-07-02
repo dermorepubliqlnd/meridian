@@ -49,9 +49,9 @@ const PRIORITY_RANK = { Low: 0, Medium: 1, High: 2 };
 
 // ── Color maps ──────────────────────────────────────────────────────────────
 const PRIORITY_PILL = {
-  Low:    "bg-emerald-100 text-emerald-700",
-  Medium: "bg-amber-100 text-amber-700",
-  High:   "bg-red-100 text-red-700",
+  High:   "bg-red-50 text-red-700 border border-red-200",
+  Medium: "bg-yellow-50 text-yellow-700 border border-yellow-200",
+  Low:    "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 
 const EFFORT_PILL = {
