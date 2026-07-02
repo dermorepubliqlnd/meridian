@@ -58,6 +58,7 @@ function TaskRow({
   onDragStart, onDragOver, onDrop, onDragEnd,
   isDraggedOver, isDragging,
   onContextMenuRow,
+  addingSubtaskFor, onCommitSubtask,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -70,7 +71,7 @@ function TaskRow({
   return (
     <>
       <tr
-        className={`align-top border-t ${isDraggedOver ? "border-t-2 border-teal bg-teal-50/30" : "border-gray-100"} hover:bg-slate-50/50 ${isDragging ? "opacity-40" : ""}`}
+        className={`group align-top border-t ${isDraggedOver ? "border-t-2 border-teal bg-teal-50/30" : "border-gray-100"} hover:bg-slate-50/50 ${isDragging ? "opacity-40" : ""}`}
         draggable={isDraggable}
         onDragStart={isDraggable ? () => onDragStart(task) : undefined}
         onDragOver={isDraggable ? (e) => { e.preventDefault(); onDragOver(task); } : undefined}
@@ -99,7 +100,12 @@ function TaskRow({
               </button>
             )}
             <div className="flex-1 min-w-0">
-              <div className="text-navy">{task.name}</div>
+              <div className="flex items-center gap-1">
+                <span className={`text-navy ${hasChildren ? "font-semibold" : ""}`}>{task.name}</span>
+                {depth === 0 && (
+                  <button onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-teal-600 hover:text-teal-700 font-bold text-[13px] px-0.5 leading-none flex-shrink-0" title="Add subtask">+</button>
+                )}
+              </div>
               {/* Indent / Outdent — only shown when row is selected */}
               {selected && (
                 <div className="flex items-center gap-1.5 mt-1">
@@ -121,11 +127,6 @@ function TaskRow({
               )}
               <div className="flex items-center gap-2 mt-0.5">
                 {hasChildren && <ProgressBar pct={completionByTaskId[task.id] || 0} />}
-                {depth === 0 && (
-                  <button onClick={() => onAddSubtask(task)} className="text-[10px] text-teal-700">
-                    + subtask
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -245,9 +246,44 @@ function TaskRow({
             onDragEnd={onDragEnd}
             isDraggedOver={false}
             isDragging={false}
+            addingSubtaskFor={addingSubtaskFor}
+            onCommitSubtask={onCommitSubtask}
           />
         ))}
+      {expanded && addingSubtaskFor === task.id && (
+        <AddSubtaskRow
+          depth={1}
+          onSave={(name) => onCommitSubtask(task, name)}
+          onCancel={() => onCommitSubtask(task, "")}
+        />
+      )}
     </>
+  );
+}
+
+function AddSubtaskRow({ depth, onSave, onCancel }) {
+  const [name, setName] = useState("");
+  return (
+    <tr className="border-t border-gray-100 bg-teal-50/30">
+      <td className="px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 20}px` }} colSpan={8}>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-300 text-[11px]">↳</span>
+          <input
+            autoFocus
+            placeholder="Subtask name..."
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave(name);
+              if (e.key === "Escape") onCancel();
+            }}
+            className="flex-1 border border-teal-300 rounded-md px-2 py-1 text-[12px] focus:outline-none focus:ring-1 focus:ring-teal"
+          />
+          <button onClick={() => onSave(name)} className="text-[11px] bg-navy text-white px-3 py-1 rounded-md">Add</button>
+          <button onClick={onCancel} className="text-[11px] text-gray-500 px-2">Cancel</button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -355,6 +391,7 @@ export default function ProjectDetailPage() {
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [showDeleteProjectConfirm, setShowDeleteProjectConfirm] = useState(false);
+  const [addingSubtaskFor, setAddingSubtaskFor] = useState(null);
 
   useEffect(() => {
     const unsubProject = onSnapshot(doc(db, "projects", id), (snap) => {
@@ -432,9 +469,13 @@ export default function ProjectDetailPage() {
     setAddingTask(false);
   };
 
-  const addSubtask = async (parentTask) => {
-    const name = window.prompt("Subtask name");
-    if (!name || !name.trim()) return;
+  const addSubtask = (parentTask) => {
+    setAddingSubtaskFor(parentTask.id);
+    setExpandedTasks((p) => ({ ...p, [parentTask.id]: true }));
+  };
+
+  const commitSubtask = async (parentTask, name) => {
+    if (!name.trim()) { setAddingSubtaskFor(null); return; }
     const siblingCount = (childrenByParent[parentTask.id] || []).length;
     await addDoc(collection(db, "projects", id, "tasks"), {
       parentTaskId: parentTask.id, phase: parentTask.phase, name: name.trim(), notes: "", responsibleRole: "",
@@ -442,7 +483,7 @@ export default function ProjectDetailPage() {
       startDateOverridden: false, actualCompletionDate: null, status: "Not Started", blockedBy: [],
       order: siblingCount + 1,
     });
-    setExpandedTasks((p) => ({ ...p, [parentTask.id]: true }));
+    setAddingSubtaskFor(null);
   };
 
   const deleteTask = async (task) => {
@@ -652,6 +693,16 @@ export default function ProjectDetailPage() {
           <p className="text-xs text-gray-500 mt-0.5">{project.description}</p>
         </div>
         <div className="flex items-center gap-3">
+          {isOwner && project.status === "Scoping" && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
+            <button
+              onClick={submitBaseline}
+              disabled={!proposedBaseline && !manualBaseline}
+              className="text-[11px] bg-teal text-navy font-semibold px-3 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed border border-teal/60"
+              title={!proposedBaseline && !manualBaseline ? "Add tasks with estimated hours first, or set a manual date in the Baseline section below" : ""}
+            >
+              Submit for Approval →
+            </button>
+          )}
           {profile?.role === "Admin" && (
             <button onClick={() => setShowDeleteProjectConfirm(true)} className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 rounded-md px-2.5 py-1 hover:border-red-400 transition">
               Delete project
@@ -949,6 +1000,8 @@ export default function ProjectDetailPage() {
                           e.preventDefault();
                           setContextMenu({ x: e.clientX, y: e.clientY, task, canIndent: canInd, canOutdent: canOut });
                         }}
+                        addingSubtaskFor={addingSubtaskFor}
+                        onCommitSubtask={commitSubtask}
                       />
                     ))}
                 </Fragment>
