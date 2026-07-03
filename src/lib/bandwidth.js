@@ -44,14 +44,22 @@ export function computeUserBandwidth(allTasks, userId, workCalendar) {
 
 // ── Daily allocation helpers ──────────────────────────────────────────────────
 
+// Use local date string to avoid UTC timezone shift (critical for UTC+8 PH timezone)
+function localDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /** Returns array of YYYY-MM-DD strings for Mon–Fri days in [startStr, endStr] */
 export function getWorkingDaysInRange(startStr, endStr) {
   const days = [];
   const cur = new Date(startStr + "T00:00:00");
-  const end = new Date(endStr  + "T00:00:00");
+  const end = new Date(endStr   + "T00:00:00");
   while (cur <= end) {
     const dow = cur.getDay();
-    if (dow !== 0 && dow !== 6) days.push(cur.toISOString().slice(0, 10));
+    if (dow !== 0 && dow !== 6) days.push(localDateStr(cur));
     cur.setDate(cur.getDate() + 1);
   }
   return days;
@@ -63,7 +71,8 @@ export function getAllDaysInRange(startStr, endStr) {
   const cur = new Date(startStr + "T00:00:00");
   const end = new Date(endStr   + "T00:00:00");
   while (cur <= end) {
-    days.push({ date: cur.toISOString().slice(0, 10), isWeekend: cur.getDay() === 0 || cur.getDay() === 6 });
+    const dow = cur.getDay();
+    days.push({ date: localDateStr(cur), isWeekend: dow === 0 || dow === 6 });
     cur.setDate(cur.getDate() + 1);
   }
   return days;
