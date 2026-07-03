@@ -7,7 +7,6 @@ import {
   serverTimestamp,
   getDoc,
   updateDoc,
-  arrayUnion,
   getDocs,
   query,
   where,
@@ -25,16 +24,28 @@ function genTempPassword() {
   return "Md" + Math.random().toString(36).slice(-8) + "!1";
 }
 
+// ── Role-based capacity defaults ──────────────────────────────────────────────
+// weeklyHours × projectCapacityPct = hours available for project work per week
+// Edit per person after adding — these are starting points only.
+const CAPACITY_DEFAULTS = {
+  "Trainer":                { weeklyHours: 37.5, projectCapacityPct: 40 },  // 2–3 training days BAU; ~2 days for project work
+  "Instructional Designer": { weeklyHours: 37.5, projectCapacityPct: 60 },  // ~3h meetings/wk; rest is project work
+  "Content Developer":      { weeklyHours: 37.5, projectCapacityPct: 60 },  // same as ID for now
+  "L&D Supervisor":         { weeklyHours: 37.5, projectCapacityPct: 60 },  // BAU oversight balanced with project load
+  "L&D Director":           { weeklyHours: 37.5, projectCapacityPct: 60 },  // strategic + oversight; adjust as needed
+};
+const DEFAULT_CAPACITY = { weeklyHours: 37.5, projectCapacityPct: 60 };
+
 // ── Capacity badge ────────────────────────────────────────────────────────────
 function CapacityBadge({ user }) {
-  const weekly = user.weeklyHours ?? 37.5;
-  const pct    = user.projectCapacityPct ?? 60;
   const projHrs = Math.round(userWeeklyProjectHours(user) * 10) / 10;
+  const weekly  = user.weeklyHours        ?? 37.5;
+  const pct     = user.projectCapacityPct ?? 60;
   return (
     <div>
       <span className="text-[13px] font-medium text-navy">{projHrs}h</span>
       <span className="text-[11px] text-gray-400"> /wk project</span>
-      <div className="text-[10px] text-gray-400 mt-0.5">{weekly}h total · {pct}% project capacity</div>
+      <div className="text-[10px] text-gray-400 mt-0.5">{weekly}h total · {pct}% project cap</div>
     </div>
   );
 }
@@ -50,6 +61,17 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
     projectCapacityPct: user.projectCapacityPct ?? 60,
   });
   const [saving, setSaving] = useState(false);
+
+  // Auto-fill capacity when job title changes — only if user hasn't manually adjusted
+  const handleJobTitleChange = (title) => {
+    const defaults = CAPACITY_DEFAULTS[title] || DEFAULT_CAPACITY;
+    setEdit(prev => ({
+      ...prev,
+      jobTitle: title,
+      weeklyHours:        defaults.weeklyHours,
+      projectCapacityPct: defaults.projectCapacityPct,
+    }));
+  };
 
   const save = async () => {
     setSaving(true);
@@ -82,7 +104,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
       <td className="px-3 py-2">
         <select
           value={edit.jobTitle}
-          onChange={(e) => setEdit({ ...edit, jobTitle: e.target.value })}
+          onChange={(e) => handleJobTitleChange(e.target.value)}
           className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
         >
           <option value="">—</option>
@@ -159,6 +181,7 @@ export default function UserManagementPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     name: "", email: "", role: "Contributor", jobTitle: "", reportsTo: "",
+    weeklyHours: 37.5, projectCapacityPct: 60,
   });
   const [status,     setStatus]     = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -173,6 +196,17 @@ export default function UserManagementPage() {
   const isAdmin = profile?.role === "Admin";
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
 
+  // Auto-fill capacity defaults when job title is selected in Add User form
+  const handleFormJobTitleChange = (title) => {
+    const defaults = CAPACITY_DEFAULTS[title] || DEFAULT_CAPACITY;
+    setForm(prev => ({
+      ...prev,
+      jobTitle: title,
+      weeklyHours:        defaults.weeklyHours,
+      projectCapacityPct: defaults.projectCapacityPct,
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus(null);
@@ -186,15 +220,15 @@ export default function UserManagementPage() {
         role:               form.role,
         jobTitle:           form.jobTitle,
         reportsTo:          form.reportsTo || null,
-        weeklyHours:        37.5,   // Phase 1 default
-        projectCapacityPct: 60,     // Phase 1 default — edit per person after adding
+        weeklyHours:        Number(form.weeklyHours),
+        projectCapacityPct: Number(form.projectCapacityPct),
         createdAt:          serverTimestamp(),
       });
       setStatus({
         type: "success",
-        message: `${form.name} added. Temp password: ${tempPassword} · Default capacity: 37.5h/wk, 60% project time (edit to adjust).`,
+        message: `${form.name} added · Temp password: ${tempPassword}`,
       });
-      setForm({ name: "", email: "", role: "Contributor", jobTitle: "", reportsTo: "" });
+      setForm({ name: "", email: "", role: "Contributor", jobTitle: "", reportsTo: "", weeklyHours: 37.5, projectCapacityPct: 60 });
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     } finally {
@@ -244,8 +278,7 @@ export default function UserManagementPage() {
     <div>
       <h2 className="text-xl font-bold font-heading text-navy mb-0.5">User Management</h2>
       <p className="text-xs text-gray-500 mb-4">
-        Add team members, assign job title, reporting line, system role, and capacity profile.
-        Capacity defaults to 37.5h/wk total · 60% project time — edit each person to reflect their actual availability.
+        Add team members and assign their capacity profile. Capacity defaults auto-fill by job title — adjust per person as needed.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -269,13 +302,12 @@ export default function UserManagementPage() {
             <label className="text-xs text-gray-500 mb-1 block">Job Title</label>
             <select
               value={form.jobTitle} required
-              onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+              onChange={(e) => handleFormJobTitleChange(e.target.value)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
             >
               <option value="" disabled>Select job title</option>
               {jobTitles.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">Manage job titles in Admin Settings → Job Titles.</p>
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Reports To</label>
@@ -298,9 +330,13 @@ export default function UserManagementPage() {
               {SYSTEM_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
-          <div className="bg-slate-50 border border-gray-200 rounded-md p-2.5 text-[11px] text-gray-500">
-            Capacity defaults to <strong>37.5h/wk · 60% project time</strong> (22.5h available for projects). Edit the person after adding to adjust.
-          </div>
+          {/* Live capacity preview */}
+          {form.jobTitle && (
+            <div className="bg-teal-50 border border-teal-100 rounded-md p-2.5 text-[11px] text-teal-700">
+              <span className="font-medium">{form.jobTitle}</span> defaults: {form.weeklyHours}h/wk · {form.projectCapacityPct}% project cap
+              → <strong>{Math.round(form.weeklyHours * form.projectCapacityPct / 100 * 10) / 10}h/wk for projects</strong>
+            </div>
+          )}
           <button
             type="submit" disabled={submitting}
             className="w-full bg-navy text-white rounded-md py-2 text-sm font-medium hover:bg-navy-light transition disabled:opacity-50"
@@ -388,6 +424,82 @@ export default function UserManagementPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ── Capacity reference guide ── */}
+      <div className="mt-6 bg-white rounded-lg border border-gray-100 shadow-sm p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="text-[13px] font-semibold text-navy">Capacity Reference Guide</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Default values auto-fill when a job title is selected. Override per person using the Edit button above.
+            </p>
+          </div>
+          <span className="text-[10px] text-gray-400 bg-slate-50 border border-gray-200 rounded px-2 py-1">
+            Dermorepubliq L&amp;D defaults
+          </span>
+        </div>
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wide">
+              <th className="text-left pb-2 font-medium">Job Title</th>
+              <th className="text-center pb-2 font-medium">Weekly Hours</th>
+              <th className="text-center pb-2 font-medium">Project Cap %</th>
+              <th className="text-center pb-2 font-medium">Hrs/wk for Projects</th>
+              <th className="text-left pb-2 font-medium pl-4">Rationale</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              {
+                title: "Trainer",
+                weekly: 37.5, pct: 40,
+                note: "Delivers 2–3 full training days/week (BAU). ~2 days available for project work.",
+                badge: "bg-orange-50 text-orange-600",
+              },
+              {
+                title: "Instructional Designer",
+                weekly: 37.5, pct: 60,
+                note: "~3h meetings/week. Majority of time is project-trackable design and development.",
+                badge: "bg-teal-50 text-teal-600",
+              },
+              {
+                title: "Content Developer",
+                weekly: 37.5, pct: 60,
+                note: "Same as ID for now. Adjust if production load changes.",
+                badge: "bg-teal-50 text-teal-600",
+              },
+              {
+                title: "L&D Supervisor",
+                weekly: 37.5, pct: 60,
+                note: "Mix of oversight and project execution. Adjust if primarily managing.",
+                badge: "bg-teal-50 text-teal-600",
+              },
+              {
+                title: "L&D Director",
+                weekly: 37.5, pct: 60,
+                note: "Strategic + stakeholder work. Adjust down if calendar is heavier.",
+                badge: "bg-teal-50 text-teal-600",
+              },
+            ].map(({ title, weekly, pct, note, badge }) => {
+              const projHrs = Math.round(weekly * pct / 100 * 10) / 10;
+              return (
+                <tr key={title} className="border-b border-gray-50 last:border-0">
+                  <td className="py-2.5 font-medium text-navy">{title}</td>
+                  <td className="py-2.5 text-center text-gray-600">{weekly}h</td>
+                  <td className="py-2.5 text-center">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${badge}`}>{pct}%</span>
+                  </td>
+                  <td className="py-2.5 text-center font-semibold text-navy">{projHrs}h</td>
+                  <td className="py-2.5 text-gray-400 pl-4">{note}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <p className="text-[10px] text-gray-400 mt-3 border-t border-gray-50 pt-3">
+          These defaults are set in the codebase. To make them configurable in Admin Settings, let your developer know — this can be added in a future update.
+        </p>
       </div>
     </div>
   );
