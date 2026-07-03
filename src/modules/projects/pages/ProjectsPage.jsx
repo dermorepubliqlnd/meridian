@@ -86,13 +86,65 @@ const GROUP_HEADER_ACCENT = {
 const GROUP_HEADER_DEFAULT = "border-l-4 border-navy/20 bg-slate-50";
 
 // ── Board view config ─────────────────────────────────────────────────────────
-const BOARD_COLUMNS = [
-  { key: "Not Started", label: "Not Started", accent: "border-gray-300",   bg: "bg-gray-50",      dot: "bg-gray-400"    },
-  { key: "Active",      label: "Active",      accent: "border-blue-300",   bg: "bg-blue-50",      dot: "bg-blue-500"    },
-  { key: "On Hold",     label: "On Hold",     accent: "border-amber-300",  bg: "bg-amber-50",     dot: "bg-amber-500"   },
-  { key: "Done",        label: "Done",        accent: "border-emerald-300",bg: "bg-emerald-50",   dot: "bg-emerald-500" },
-  { key: "Canceled",    label: "Canceled",    accent: "border-red-200",    bg: "bg-red-50",       dot: "bg-red-400"     },
+// Board grouping options
+const BOARD_GROUP_OPTIONS = [
+  { key: "status",   label: "Status"   },
+  { key: "phase",    label: "Phase"    },
+  { key: "owner",    label: "Owner"    },
+  { key: "health",   label: "Health"   },
+  { key: "priority", label: "Priority" },
 ];
+
+// Static columns per grouping (dynamic ones like owner are computed at render)
+const BOARD_COLUMNS_BY_GROUP = {
+  status: [
+    { key: "Not Started", accent: "border-gray-300",    bg: "bg-gray-50",       dot: "bg-gray-400"    },
+    { key: "Active",      accent: "border-blue-300",    bg: "bg-blue-50",       dot: "bg-blue-500"    },
+    { key: "On Hold",     accent: "border-amber-300",   bg: "bg-amber-50",      dot: "bg-amber-500"   },
+    { key: "Done",        accent: "border-emerald-300", bg: "bg-emerald-50",    dot: "bg-emerald-500" },
+    { key: "Canceled",    accent: "border-red-200",     bg: "bg-red-50",        dot: "bg-red-400"     },
+  ],
+  phase: [
+    { key: "Scoping",        accent: "border-slate-400",   bg: "bg-slate-50",      dot: "bg-slate-400"   },
+    { key: "Planning",       accent: "border-yellow-400",  bg: "bg-yellow-50",     dot: "bg-yellow-500"  },
+    { key: "Design",         accent: "border-purple-400",  bg: "bg-purple-50",     dot: "bg-purple-500"  },
+    { key: "Development",    accent: "border-blue-400",    bg: "bg-blue-50",       dot: "bg-blue-500"    },
+    { key: "Review",         accent: "border-orange-400",  bg: "bg-orange-50",     dot: "bg-orange-500"  },
+    { key: "Implementation", accent: "border-teal-400",    bg: "bg-teal-50",       dot: "bg-teal-500"    },
+    { key: "Evaluation",     accent: "border-emerald-400", bg: "bg-emerald-50",    dot: "bg-emerald-500" },
+  ],
+  health: [
+    { key: "On Track",        accent: "border-emerald-400", bg: "bg-emerald-50",  dot: "bg-emerald-500" },
+    { key: "At Risk",         accent: "border-amber-400",   bg: "bg-amber-50",    dot: "bg-amber-500"   },
+    { key: "Behind Schedule", accent: "border-red-400",     bg: "bg-red-50",      dot: "bg-red-500"     },
+    { key: "On Hold",         accent: "border-gray-300",    bg: "bg-gray-50",     dot: "bg-gray-400"    },
+    { key: "Scoping",         accent: "border-slate-300",   bg: "bg-slate-50",    dot: "bg-slate-400"   },
+  ],
+  priority: [
+    { key: "High",   accent: "border-red-300",     bg: "bg-red-50",     dot: "bg-red-500"     },
+    { key: "Medium", accent: "border-yellow-300",  bg: "bg-yellow-50",  dot: "bg-yellow-500"  },
+    { key: "Low",    accent: "border-emerald-300", bg: "bg-emerald-50", dot: "bg-emerald-500" },
+  ],
+};
+
+// Card fields config
+const CARD_FIELD_DEFS = [
+  { key: "phase",       label: "Phase"       },
+  { key: "priority",    label: "Priority"    },
+  { key: "health",      label: "Health"      },
+  { key: "owner",       label: "Owner"       },
+  { key: "completion",  label: "Completion"  },
+  { key: "overdue",     label: "Overdue tag" },
+  { key: "endDate",     label: "End Date"    },
+];
+const DEFAULT_CARD_FIELDS = new Set(["phase","priority","health","owner","completion","overdue"]);
+
+const DEFAULT_BOARD_CONFIG = {
+  groupBy:    "status",
+  sortBy:     "name",
+  sortDir:    "asc",
+  cardFields: DEFAULT_CARD_FIELDS,
+};
 
 // ── View type icons ───────────────────────────────────────────────────────────
 const VIEW_ICONS = {
@@ -204,79 +256,135 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor, overdueCount }
 }
 
 // ── Board view ────────────────────────────────────────────────────────────────
-function BoardView({ rows, nameFor }) {
-  const colRows = (colKey) =>
-    rows.filter((r) => {
-      const s = PROJECT_STATUSES.includes(r.p.status)
-        ? r.p.status
-        : (r.p.status ? migrateLegacyStatus(r.p.status).status : "Not Started");
-      return s === colKey;
+function BoardView({ rows, nameFor, boardConfig }) {
+  const { groupBy, sortBy, sortDir, cardFields } = boardConfig;
+
+  // Build columns dynamically
+  const buildColumns = () => {
+    if (groupBy === "owner") {
+      // Dynamic: one column per unique owner
+      const owners = [...new Set(rows.map(r => nameFor(r.p.ownerId)))].sort();
+      return owners.map(name => ({
+        key: name,
+        accent: "border-navy/30",
+        bg: "bg-slate-50",
+        dot: "bg-navy",
+      }));
+    }
+    return BOARD_COLUMNS_BY_GROUP[groupBy] || BOARD_COLUMNS_BY_GROUP.status;
+  };
+
+  const columns = buildColumns();
+
+  // Get group key for a row
+  const groupKey = (r) => {
+    if (groupBy === "status") {
+      const s = r.p.status;
+      return PROJECT_STATUSES.includes(s) ? s : (s ? migrateLegacyStatus(s).status : "Not Started");
+    }
+    if (groupBy === "phase")    return r.p.phase || "Scoping";
+    if (groupBy === "owner")    return nameFor(r.p.ownerId);
+    if (groupBy === "health")   return r.health.label;
+    if (groupBy === "priority") return r.p.priority || "Low";
+    return "";
+  };
+
+  // Sort within columns
+  const sortedRows = (list) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      let va, vb;
+      if (sortBy === "priority") { va = PRIORITY_RANK[a.p.priority] ?? -1; vb = PRIORITY_RANK[b.p.priority] ?? -1; }
+      else if (sortBy === "completion") { va = a.completionPct; vb = b.completionPct; }
+      else if (sortBy === "endDate") { va = a.p.baselineEndDate || ""; vb = b.p.baselineEndDate || ""; }
+      else { va = a.p.name || ""; vb = b.p.name || ""; }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
     });
+  };
+
+  // Collect rows for a column (including "others" fallback)
+  const colRows = (colKey, isLast) => {
+    const matched = rows.filter(r => groupKey(r) === colKey);
+    if (isLast) {
+      const knownKeys = columns.map(c => c.key);
+      const others = rows.filter(r => !knownKeys.includes(groupKey(r)));
+      return sortedRows([...matched, ...others]);
+    }
+    return sortedRows(matched);
+  };
 
   return (
     <div className="flex gap-3 overflow-x-auto pb-2 items-start">
-      {BOARD_COLUMNS.map((col) => {
-        const colItems = colRows(col.key);
+      {columns.map((col, idx) => {
+        const items = colRows(col.key, idx === columns.length - 1);
         return (
           <div key={col.key} className="flex-shrink-0 w-64">
-            {/* Column header */}
             <div className={`flex items-center gap-2 px-3 py-2 rounded-t-lg border-t-2 ${col.accent} ${col.bg} border-x border-gray-200`}>
               <span className={`w-2 h-2 rounded-full ${col.dot}`} />
-              <span className="text-xs font-semibold text-gray-700">{col.label}</span>
-              <span className="ml-auto text-xs text-gray-400">{colItems.length}</span>
+              <span className="text-xs font-semibold text-gray-700">{col.key}</span>
+              <span className="ml-auto text-xs text-gray-400">{items.length}</span>
             </div>
-            {/* Cards */}
             <div className={`flex flex-col gap-2 p-2 min-h-[120px] rounded-b-lg border border-t-0 border-gray-200 ${col.bg}`}>
-              {colItems.length === 0 && (
+              {items.length === 0 && (
                 <p className="text-xs text-gray-400 text-center py-4">No projects</p>
               )}
-              {colItems.map(({ p, health, completionPct, overdueCount }) => (
+              {items.map(({ p, health, completionPct, overdueCount }) => (
                 <Link
                   key={p.id}
                   to={`/projects/${p.id}`}
                   className="block bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2.5 hover:shadow-md hover:border-teal-300 transition group"
                 >
-                  {/* Project name */}
                   <p className="text-[13px] font-semibold text-navy group-hover:underline leading-snug mb-1.5">
                     {p.name}
                   </p>
-                  {/* Phase + Priority */}
+                  {/* Badges row */}
                   <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                    {p.phase && (
+                    {cardFields.has("phase") && p.phase && (
                       <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${PHASE_STYLES[p.phase] || "bg-gray-100 text-gray-500"}`}>
                         {p.phase}
                       </span>
                     )}
-                    {p.priority && (
+                    {cardFields.has("priority") && p.priority && (
                       <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${PRIORITY_PILL[p.priority] || "bg-gray-100 text-gray-500"}`}>
                         {p.priority}
                       </span>
                     )}
-                    {overdueCount > 0 && (
+                    {cardFields.has("overdue") && overdueCount > 0 && (
                       <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
                         ⚠ {overdueCount} overdue
                       </span>
                     )}
                   </div>
                   {/* Completion bar */}
-                  <div className="mb-2">
-                    <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                      <span>Completion</span>
-                      <span>{Math.round(completionPct)}%</span>
+                  {cardFields.has("completion") && (
+                    <div className="mb-2">
+                      <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                        <span>Completion</span>
+                        <span>{Math.round(completionPct)}%</span>
+                      </div>
+                      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-teal-500 rounded-full" style={{ width: `${completionPct}%` }} />
+                      </div>
                     </div>
-                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-teal-500 rounded-full"
-                        style={{ width: `${completionPct}%` }}
-                      />
-                    </div>
-                  </div>
-                  {/* Footer: owner + health */}
+                  )}
+                  {/* End date */}
+                  {cardFields.has("endDate") && (p.baselineEndDate || p.approvedRevisedEndDate) && (
+                    <p className="text-[10px] text-gray-400 mb-1.5">
+                      Due: {p.approvedRevisedEndDate || p.baselineEndDate}
+                    </p>
+                  )}
+                  {/* Footer */}
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-gray-500 truncate">{nameFor(p.ownerId)}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${health.style}`}>
-                      {health.label}
-                    </span>
+                    {cardFields.has("owner") && (
+                      <span className="text-[11px] text-gray-500 truncate">{nameFor(p.ownerId)}</span>
+                    )}
+                    {cardFields.has("health") && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${health.style}`}>
+                        {health.label}
+                      </span>
+                    )}
                   </div>
                 </Link>
               ))}
@@ -354,6 +462,8 @@ export default function ProjectsPage() {
   const [activeViewName, setActiveViewName] = useState(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showViewsMenu, setShowViewsMenu] = useState(false);
+  const [boardConfig, setBoardConfig] = useState(DEFAULT_BOARD_CONFIG);
+  const [showBoardFieldsMenu, setShowBoardFieldsMenu] = useState(false);
 
   const dragColRef  = useRef(null);
   const resizingRef = useRef(null);
@@ -753,7 +863,77 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {viewType === "board"    && <BoardView rows={rows} nameFor={nameFor} />}
+      {viewType === "board" && (
+        <>
+          {/* Board toolbar */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            {/* Group by */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400 font-medium">Group by</span>
+              <select
+                value={boardConfig.groupBy}
+                onChange={(e) => setBoardConfig(c => ({ ...c, groupBy: e.target.value }))}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs"
+              >
+                {BOARD_GROUP_OPTIONS.map(o => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort within columns */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400 font-medium">Sort</span>
+              <select
+                value={boardConfig.sortBy}
+                onChange={(e) => setBoardConfig(c => ({ ...c, sortBy: e.target.value }))}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs"
+              >
+                <option value="name">Name</option>
+                <option value="priority">Priority</option>
+                <option value="completion">Completion</option>
+                <option value="endDate">End Date</option>
+              </select>
+              <button
+                onClick={() => setBoardConfig(c => ({ ...c, sortDir: c.sortDir === "asc" ? "desc" : "asc" }))}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white hover:bg-slate-50"
+                title="Toggle sort direction"
+              >
+                {boardConfig.sortDir === "asc" ? "▲" : "▼"}
+              </button>
+            </div>
+
+            {/* Card fields */}
+            <div className="relative">
+              <button
+                onClick={() => setShowBoardFieldsMenu(s => !s)}
+                className="text-xs font-medium bg-white border border-gray-200 rounded-md px-3 py-1.5 hover:bg-slate-50"
+              >
+                Card fields
+              </button>
+              {showBoardFieldsMenu && (
+                <div className="absolute z-10 mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg p-2">
+                  {CARD_FIELD_DEFS.map(f => (
+                    <label key={f.key} className="flex items-center gap-2 text-xs px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={boardConfig.cardFields.has(f.key)}
+                        onChange={() => setBoardConfig(c => {
+                          const next = new Set(c.cardFields);
+                          if (next.has(f.key)) next.delete(f.key); else next.add(f.key);
+                          return { ...c, cardFields: next };
+                        })}
+                      />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <BoardView rows={rows} nameFor={nameFor} boardConfig={boardConfig} />
+        </>
+      )}
       {viewType === "timeline" && <ComingSoonView viewName="timeline" />}
       {viewType === "calendar" && <ComingSoonView viewName="calendar" />}
 
