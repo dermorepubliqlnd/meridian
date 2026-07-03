@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import {
   doc,
   onSnapshot,
@@ -412,6 +412,9 @@ export default function ProjectDetailPage() {
   const { id } = useParams();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [intakeBannerDismissed, setIntakeBannerDismissed] = useState(false);
+  const showIntakeBanner = location.state?.fromIntake && !intakeBannerDismissed;
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
@@ -790,6 +793,24 @@ export default function ProjectDetailPage() {
   return (
     <div>
       <Link to="/projects" className="text-[11px] text-navy underline">← Back to Projects</Link>
+
+      {/* ── Intake next-step banner ── */}
+      {showIntakeBanner && (
+        <div className="mt-3 mb-2 flex items-start gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3">
+          <span className="text-teal-500 text-lg shrink-0">✦</span>
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold text-teal-800 mb-0.5">Draft created — WBS generated</div>
+            <div className="text-[12px] text-teal-700">
+              <strong>Next Step:</strong> Confirm WBS hours and required roles below. Resource planning and scheduling will be calculated after task effort is entered.
+            </div>
+          </div>
+          <button
+            onClick={() => setIntakeBannerDismissed(true)}
+            className="text-teal-400 hover:text-teal-600 text-[14px] shrink-0 mt-0.5"
+            title="Dismiss"
+          >✕</button>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between mt-2 mb-3">
