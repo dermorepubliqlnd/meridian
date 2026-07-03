@@ -291,6 +291,9 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor, overdueCount }
       return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{lvl || "—"}</span>;
     }
     case "status": {
+      if (p.planningStatus === "Draft / Intake") {
+        return <span className="inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-purple-100 text-purple-700">Draft / Intake</span>;
+      }
       const s = PROJECT_STATUSES.includes(p.status) ? p.status : (p.status ? migrateLegacyStatus(p.status).status : "Not Started");
       const cls = STATUS_STYLES[s] || "bg-gray-100 text-gray-500";
       return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{s}</span>;
@@ -531,6 +534,7 @@ function BoardView({ rows, nameFor, boardConfig }) {
   // Get group key for a row
   const groupKey = (r) => {
     if (groupBy === "status") {
+      if (r.p.planningStatus === "Draft / Intake") return "Draft / Intake";
       const s = r.p.status;
       return PROJECT_STATUSES.includes(s) ? s : (s ? migrateLegacyStatus(s).status : "Not Started");
     }
@@ -800,6 +804,7 @@ export default function ProjectsPage() {
     if (table.groupBy === "none") return [{ label: null, rows: sortRows(filteredRows) }];
     const groupKeyFor = (row) => {
       if (table.groupBy === "status") {
+        if (row.p.planningStatus === "Draft / Intake") return "Draft / Intake";
         const s = row.p.status;
         return PROJECT_STATUSES.includes(s) ? s : (s ? migrateLegacyStatus(s).status : "Not Started");
       }
@@ -924,6 +929,7 @@ export default function ProjectsPage() {
       {/* ── Metric cards ── */}
       <div className="flex flex-wrap gap-3 mb-4">
         {[
+          { label: "Draft",   count: rows.filter(r => r.p.planningStatus === "Draft / Intake").length,              color: "text-purple-700",  bg: "bg-purple-50",  border: "border-purple-200" },
           { label: "Active",  count: rows.filter(r => r.p.status === "Active").length,                              color: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200"   },
           { label: "At Risk", count: rows.filter(r => r.health?.label === "At Risk").length,                        color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200"  },
           { label: "Behind",  count: rows.filter(r => r.health?.label === "Behind Schedule").length,                color: "text-red-600",     bg: "bg-red-50",     border: "border-red-200"    },
