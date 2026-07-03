@@ -192,7 +192,7 @@ function UserCard({ person, tasks, workCalendar, currentUserId, isAdmin }) {
 }
 
 // ── Allocation grid view ──────────────────────────────────────────────────────
-function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
+function AllocationGrid({ people, tasks, windowStart, windowEnd, dailyCapacityHours }) {
   // All calendar days including weekends
   const allDays = useMemo(() => getAllDaysInRange(windowStart, windowEnd), [windowStart, windowEnd]);
   // Working days only (for allocation math)
@@ -216,7 +216,7 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
   const allocations = useMemo(() => {
     const result = {};
     people.forEach(p => {
-      result[p.id] = computeDailyAllocation(tasks, p.id, windowStart, windowEnd, 8);
+      result[p.id] = computeDailyAllocation(tasks, p.id, windowStart, windowEnd, dailyCapacityHours);
     });
     return result;
   }, [people, tasks, windowStart, windowEnd]);
@@ -332,11 +332,7 @@ const BAND_FILTER_OPTIONS = [
   { value: "Overloaded",label: "Overloaded"},
 ];
 
-const RANGE_OPTIONS = [
-  { value: 10, label: "2 weeks" },
-  { value: 15, label: "3 weeks" },
-  { value: 20, label: "4 weeks" },
-];
+
 
 export default function ResourcesPage() {
   const { user, profile } = useAuth();
@@ -346,13 +342,9 @@ export default function ResourcesPage() {
   const [bandFilter,   setBandFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
   const [viewMode,     setViewMode]     = useState("grid"); // "grid" | "cards"
-  const [rangeSize,    setRangeSize]    = useState(10);     // working days to show
+  const today0 = new Date().toISOString().slice(0, 10);
   const [windowStart,  setWindowStart]  = useState(() => startOfWeek(new Date().toISOString().slice(0, 10)));
-
-  const windowEnd = useMemo(() => {
-    const days = getWorkingDaysInRange(windowStart, addDays(windowStart, rangeSize * 2));
-    return days[rangeSize - 1] || addDays(windowStart, rangeSize);
-  }, [windowStart, rangeSize]);
+  const [windowEnd,    setWindowEnd]    = useState(() => addDays(startOfWeek(new Date().toISOString().slice(0, 10)), 13));
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, "users"), snap =>
@@ -392,16 +384,6 @@ export default function ResourcesPage() {
   const overAlloc   = teamBw.filter(b => b.pct > 100).length;
   const totalOutstanding = teamBw.reduce((s, b) => s + b.outstandingHours, 0);
 
-  // Date nav
-  const goBack = () => setWindowStart(prev => {
-    const days = getWorkingDaysInRange(addDays(prev, -rangeSize * 2), prev);
-    return days[days.length - rangeSize] || addDays(prev, -rangeSize);
-  });
-  const goForward = () => setWindowStart(prev => {
-    const days = getWorkingDaysInRange(prev, addDays(prev, rangeSize * 2 + 5));
-    return days[rangeSize] || addDays(prev, rangeSize);
-  });
-
   return (
     <div>
       {/* Header */}
@@ -411,22 +393,25 @@ export default function ResourcesPage() {
           <p className="text-[11px] text-gray-400">View resource availability and allocation across projects.</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Date nav (grid only) */}
+          {/* Date range pickers (grid only) */}
           {viewMode === "grid" && (
-            <div className="flex items-center gap-1 border border-gray-200 rounded-md overflow-hidden text-xs bg-white">
-              <button onClick={goBack} className="px-2 py-1.5 hover:bg-slate-50 border-r border-gray-200">‹</button>
-              <span className="px-3 py-1.5 text-gray-600 whitespace-nowrap font-medium">
-                {fmtDate(windowStart)} – {fmtDate(windowEnd)}
-              </span>
-              <button onClick={goForward} className="px-2 py-1.5 hover:bg-slate-50 border-l border-gray-200">›</button>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400">From</span>
+              <input
+                type="date"
+                value={windowStart}
+                onChange={e => setWindowStart(e.target.value)}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-teal"
+              />
+              <span className="text-gray-400">To</span>
+              <input
+                type="date"
+                value={windowEnd}
+                min={windowStart}
+                onChange={e => setWindowEnd(e.target.value)}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-teal"
+              />
             </div>
-          )}
-          {/* Range selector */}
-          {viewMode === "grid" && (
-            <select value={rangeSize} onChange={e => setRangeSize(Number(e.target.value))}
-              className="border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-white">
-              {RANGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
           )}
           {/* View toggle */}
           <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs font-medium">
@@ -496,7 +481,7 @@ export default function ResourcesPage() {
 
       {/* Content */}
       {viewMode === "grid" ? (
-        <AllocationGrid people={sorted} tasks={tasks} windowStart={windowStart} windowEnd={windowEnd} />
+        <AllocationGrid people={sorted} tasks={tasks} windowStart={windowStart} windowEnd={windowEnd} dailyCapacityHours={workCalendar.dailyCapacityHours || 8} />
       ) : (
         sorted.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center text-[12px] text-gray-400">
@@ -513,7 +498,7 @@ export default function ResourcesPage() {
       )}
 
       <p className="text-[10px] text-gray-400 mt-3 text-center">
-        Percentages represent daily task hours ÷ 8h capacity. Grid shows working days only.
+        {`Percentages represent daily task hours ÷ ${workCalendar.dailyCapacityHours || 8}h capacity (as configured in Settings). Grid shows working days only.`}
       </p>
     </div>
   );
