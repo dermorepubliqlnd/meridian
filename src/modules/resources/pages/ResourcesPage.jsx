@@ -3,7 +3,8 @@ import { collection, collectionGroup, doc, getDoc, onSnapshot, updateDoc } from 
 import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
 import {
-  getBand, computeUserBandwidth, computeDailyAllocation, getWorkingDaysInRange, getAllDaysInRange,
+  getBand, computeUserBandwidth, computeDailyAllocation,
+  getWorkingDaysInRange, getAllDaysInRange, userDailyProjectCapacity,
 } from "../../../lib/bandwidth";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -33,13 +34,13 @@ function dayLabel(dateStr) {
   return { day: d.getDate(), dow: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] };
 }
 
-// ── Allocation cell color ─────────────────────────────────────────────────────
+// ── Allocation cell color — Phase 1 thresholds (% of project capacity) ───────
 function cellStyle(pct) {
   if (!pct) return { bg: "bg-white", text: "text-gray-300" };
-  if (pct <= 70)  return { bg: "bg-emerald-50",  text: "text-emerald-700" };
-  if (pct <= 90)  return { bg: "bg-teal-50",     text: "text-teal-700"   };
+  if (pct <= 60)  return { bg: "bg-emerald-50",  text: "text-emerald-700" };
+  if (pct <= 85)  return { bg: "bg-teal-50",     text: "text-teal-700"   };
   if (pct <= 100) return { bg: "bg-yellow-50",   text: "text-yellow-700" };
-  if (pct <= 110) return { bg: "bg-orange-50",   text: "text-orange-700" };
+  if (pct <= 120) return { bg: "bg-orange-50",   text: "text-orange-700" };
   return               { bg: "bg-red-50",        text: "text-red-700"   };
 }
 
@@ -146,7 +147,7 @@ function UserCard({ person, tasks, workCalendar, currentUserId, isAdmin }) {
   const [expanded, setExpanded] = useState(false);
   const [timeOff,  setTimeOff]  = useState(person.timeOff || []);
   const canEdit = isAdmin || person.id === currentUserId;
-  const bw = computeUserBandwidth(tasks, person.id, workCalendar);
+  const bw = computeUserBandwidth(tasks, person.id, workCalendar, person);
   const band = bw.band;
   const activeTasks = bw.tasks.filter(t => t.status !== "Not Started");
   const initials = person.name?.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?";
@@ -246,10 +247,11 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd, dailyCapacityHo
     return groups;
   }, [allDays]);
 
+  // Per-user daily allocation — uses each person's own project capacity
   const allocations = useMemo(() => {
     const result = {};
     people.forEach(p => {
-      result[p.id] = computeDailyAllocation(tasks, p.id, windowStart, windowEnd, dailyCapacityHours);
+      result[p.id] = computeDailyAllocation(tasks, p.id, windowStart, windowEnd, dailyCapacityHours, p);
     });
     return result;
   }, [people, tasks, windowStart, windowEnd, dailyCapacityHours]);
@@ -344,7 +346,6 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd, dailyCapacityHo
             const peak       = peakPct(person.id);
             const peakStyle  = cellStyle(peak);
             const isExpanded = expandedRows.has(person.id);
-            // Use explicit hex for sticky cell bg so it matches the row tint perfectly
             const rowBg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
 
             const personRow = (
@@ -488,14 +489,14 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd, dailyCapacityHo
   );
 }
 
-// ── Band filter options ───────────────────────────────────────────────────────
+// ── Band filter options — Phase 1 labels ──────────────────────────────────────
 const BAND_FILTER_OPTIONS = [
-  { value: "all",        label: "All"        },
-  { value: "Available",  label: "Available"  },
-  { value: "Healthy",    label: "Healthy"    },
-  { value: "Full",       label: "Full"       },
-  { value: "At Risk",    label: "At Risk"    },
-  { value: "Overloaded", label: "Overloaded" },
+  { value: "all",              label: "All bandwidth"     },
+  { value: "Available",        label: "Available"         },
+  { value: "Healthy",          label: "Healthy"           },
+  { value: "Fully Allocated",  label: "Fully Allocated"   },
+  { value: "Overallocated",    label: "Overallocated"     },
+  { value: "Critical Overload",label: "Critical Overload" },
 ];
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -504,7 +505,7 @@ export default function ResourcesPage() {
   const [people,       setPeople]       = useState([]);
   const [tasks,        setTasks]        = useState([]);
   const [projects,     setProjects]     = useState([]);
-  const [workCalendar, setWorkCalendar] = useState({ dailyCapacityHours: 8, workDaysPerWeek: 5 });
+  const [workCalendar, setWorkCalendar] = useState({ dailyCapacityHours: 7.5, workDaysPerWeek: 5 });
   const [bandFilter,   setBandFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
   const [viewMode,     setViewMode]     = useState("grid");
@@ -531,12 +532,12 @@ export default function ResourcesPage() {
     [people, isAdmin]
   );
 
-  // Window-based peak per person — cards match the grid
+  // Window-based peak per person using per-user project capacity
   const windowPeaks = useMemo(() => {
-    const cap = workCalendar.dailyCapacityHours || 8;
+    const cap = workCalendar.dailyCapacityHours || 7.5;
     const peaks = {};
     visiblePeople.forEach(p => {
-      const daily = computeDailyAllocation(tasks, p.id, windowStart, windowEnd, cap);
+      const daily = computeDailyAllocation(tasks, p.id, windowStart, windowEnd, cap, p);
       const vals  = Object.values(daily).map(v => v.pct);
       peaks[p.id] = vals.length ? Math.max(...vals) : 0;
     });
@@ -546,25 +547,25 @@ export default function ResourcesPage() {
   const filtered = visiblePeople.filter(p => {
     if (search && !p.name?.toLowerCase().includes(search.toLowerCase())) return false;
     if (bandFilter !== "all") {
-      const bw = computeUserBandwidth(tasks, p.id, workCalendar);
+      const bw = computeUserBandwidth(tasks, p.id, workCalendar, p);
       if (bw.band.label !== bandFilter) return false;
     }
     return true;
   });
 
   const sorted = [...filtered].sort((a, b) => {
-    const ba = computeUserBandwidth(tasks, a.id, workCalendar).pct;
-    const bb = computeUserBandwidth(tasks, b.id, workCalendar).pct;
+    const ba = computeUserBandwidth(tasks, a.id, workCalendar, a).pct;
+    const bb = computeUserBandwidth(tasks, b.id, workCalendar, b).pct;
     return bb - ba;
   });
 
-  // Metric cards — window-based peak so they align with the grid
-  const fullyAvail = visiblePeople.filter(p => windowPeaks[p.id] <= 70).length;
-  const partial    = visiblePeople.filter(p => windowPeaks[p.id] > 70 && windowPeaks[p.id] <= 100).length;
+  // Metric cards — Phase 1 thresholds (0-60 Available, 61-100 Healthy/Full, 101+ Over)
+  const fullyAvail = visiblePeople.filter(p => windowPeaks[p.id] <= 60).length;
+  const partial    = visiblePeople.filter(p => windowPeaks[p.id] > 60 && windowPeaks[p.id] <= 100).length;
   const overAlloc  = visiblePeople.filter(p => windowPeaks[p.id] > 100).length;
-  // Total Outstanding stays rolling (total work queued, not window-scoped)
+  // Total outstanding stays rolling
   const totalOutstanding = visiblePeople.reduce((s, p) =>
-    s + computeUserBandwidth(tasks, p.id, workCalendar).outstandingHours, 0);
+    s + computeUserBandwidth(tasks, p.id, workCalendar, p).outstandingHours, 0);
 
   return (
     <div>
@@ -572,7 +573,7 @@ export default function ResourcesPage() {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold font-heading text-navy mb-0.5">People & Resources</h2>
-          <p className="text-[11px] text-gray-400">View resource availability and allocation across projects.</p>
+          <p className="text-[11px] text-gray-400">Allocation based on each person's project capacity · Hover a name and click ▶ to see project breakdown.</p>
         </div>
         <div className="flex items-center gap-2">
           {viewMode === "grid" && (
@@ -601,11 +602,11 @@ export default function ResourcesPage() {
       {/* Summary strip */}
       <div className="flex gap-3 mb-4 flex-wrap">
         {[
-          { label: "Team Members",      value: visiblePeople.length,   sub: "active members",                                                                                                 color: "text-navy"         },
-          { label: "Available",         value: fullyAvail,             sub: `${visiblePeople.length ? Math.round(fullyAvail/visiblePeople.length*100)  : 0}% of team`, color: "text-emerald-700", dot: "bg-emerald-400" },
-          { label: "Healthy / Full",    value: partial,                sub: `${visiblePeople.length ? Math.round(partial/visiblePeople.length*100)     : 0}% of team`, color: "text-teal-700",    dot: "bg-teal-400"    },
-          { label: "Over Allocated",    value: overAlloc,              sub: `${visiblePeople.length ? Math.round(overAlloc/visiblePeople.length*100)   : 0}% of team`, color: "text-red-600",     dot: "bg-red-400", alert: overAlloc > 0 },
-          { label: "Total Outstanding", value: `${totalOutstanding}h`, sub: "estimated hrs remaining",                                                                  color: "text-gray-700"     },
+          { label: "Team Members",      value: visiblePeople.length,   sub: "active members",                                                                                                       color: "text-navy"         },
+          { label: "Available",         value: fullyAvail,             sub: `${visiblePeople.length ? Math.round(fullyAvail/visiblePeople.length*100)  : 0}% of team · ≤60% project cap`, color: "text-emerald-700", dot: "bg-emerald-400" },
+          { label: "Healthy / Full",    value: partial,                sub: `${visiblePeople.length ? Math.round(partial/visiblePeople.length*100)     : 0}% of team · 61–100%`,          color: "text-teal-700",    dot: "bg-teal-400"    },
+          { label: "Over Allocated",    value: overAlloc,              sub: `${visiblePeople.length ? Math.round(overAlloc/visiblePeople.length*100)   : 0}% of team · >100%`,            color: "text-red-600",     dot: "bg-red-400", alert: overAlloc > 0 },
+          { label: "Total Outstanding", value: `${totalOutstanding}h`, sub: "estimated hrs remaining",                                                                                         color: "text-gray-700"     },
         ].map(({ label, value, sub, color, dot, alert }) => (
           <div key={label} className={`flex-1 min-w-[130px] bg-white rounded-lg border shadow-sm p-3 ${alert ? "border-red-200" : "border-gray-100"}`}>
             <div className="flex items-center gap-1.5 mb-0.5">
@@ -616,15 +617,15 @@ export default function ResourcesPage() {
             <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>
           </div>
         ))}
-        {/* Legend */}
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 min-w-[160px]">
-          <div className="text-[11px] font-medium text-gray-500 mb-2">Legend</div>
+        {/* Legend — Phase 1 thresholds */}
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 min-w-[180px]">
+          <div className="text-[11px] font-medium text-gray-500 mb-2">Legend (% of project capacity)</div>
           {[
-            { range: "0 – 70%",    label: "Available",  cls: "bg-emerald-400" },
-            { range: "71 – 90%",   label: "Healthy",    cls: "bg-teal-400"    },
-            { range: "91 – 100%",  label: "Full",       cls: "bg-yellow-400"  },
-            { range: "101 – 110%", label: "At Risk",    cls: "bg-orange-400"  },
-            { range: "111%+",      label: "Overloaded", cls: "bg-red-400"     },
+            { range: "0 – 60%",    label: "Available",         cls: "bg-emerald-400" },
+            { range: "61 – 85%",   label: "Healthy",           cls: "bg-teal-400"    },
+            { range: "86 – 100%",  label: "Fully Allocated",   cls: "bg-yellow-400"  },
+            { range: "101 – 120%", label: "Overallocated",     cls: "bg-orange-400"  },
+            { range: "121%+",      label: "Critical Overload", cls: "bg-red-400"     },
           ].map(({ range, label, cls }) => (
             <div key={label} className="flex items-center gap-1.5 mb-1">
               <span className={`w-2.5 h-2.5 rounded-sm ${cls}`} />
@@ -642,7 +643,7 @@ export default function ResourcesPage() {
         <select value={bandFilter} onChange={e => setBandFilter(e.target.value)}
           className="border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-gray-600">
           {BAND_FILTER_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.value === "all" ? "All bandwidth" : o.label}</option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
       </div>
@@ -654,7 +655,7 @@ export default function ResourcesPage() {
           tasks={tasks}
           windowStart={windowStart}
           windowEnd={windowEnd}
-          dailyCapacityHours={workCalendar.dailyCapacityHours || 8}
+          dailyCapacityHours={workCalendar.dailyCapacityHours || 7.5}
           projects={projects}
         />
       ) : (
@@ -673,7 +674,7 @@ export default function ResourcesPage() {
       )}
 
       <p className="text-[10px] text-gray-400 mt-3 text-center">
-        {`% = daily task hours ÷ ${workCalendar.dailyCapacityHours || 8}h capacity · Hours shown below each % · Peak = highest single-day % in range · Cards reflect current window · Click ▶ on a name to see project breakdown`}
+        % = daily task hours ÷ per-person project capacity · Hours shown below each % · Peak = highest single-day % in window · Cards reflect selected date range · Click ▶ on a name to expand project breakdown
       </p>
     </div>
   );
