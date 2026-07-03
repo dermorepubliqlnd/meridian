@@ -3,7 +3,7 @@ import { collection, collectionGroup, doc, getDoc, onSnapshot, updateDoc } from 
 import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
 import {
-  getBand, computeUserBandwidth, computeDailyAllocation, getWorkingDaysInRange,
+  getBand, computeUserBandwidth, computeDailyAllocation, getWorkingDaysInRange, getAllDaysInRange,
 } from "../../../lib/bandwidth";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -193,13 +193,16 @@ function UserCard({ person, tasks, workCalendar, currentUserId, isAdmin }) {
 
 // ── Allocation grid view ──────────────────────────────────────────────────────
 function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
-  const days = useMemo(() => getWorkingDaysInRange(windowStart, windowEnd), [windowStart, windowEnd]);
+  // All calendar days including weekends
+  const allDays = useMemo(() => getAllDaysInRange(windowStart, windowEnd), [windowStart, windowEnd]);
+  // Working days only (for allocation math)
+  const workDays = useMemo(() => allDays.filter(d => !d.isWeekend).map(d => d.date), [allDays]);
 
   // Group days by month for the header
   const monthGroups = useMemo(() => {
     const groups = [];
-    days.forEach(d => {
-      const m = fmtMonth(d);
+    allDays.forEach(({ date }) => {
+      const m = fmtMonth(date);
       if (groups.length === 0 || groups[groups.length - 1].label !== m) {
         groups.push({ label: m, count: 1 });
       } else {
@@ -207,9 +210,9 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
       }
     });
     return groups;
-  }, [days]);
+  }, [allDays]);
 
-  // Compute daily allocation per person
+  // Compute daily allocation per person (working days only)
   const allocations = useMemo(() => {
     const result = {};
     people.forEach(p => {
@@ -218,10 +221,10 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
     return result;
   }, [people, tasks, windowStart, windowEnd]);
 
-  // Average allocation per person over the window
+  // Average allocation over working days only
   const avgPct = (personId) => {
     const daily = allocations[personId] || {};
-    const vals = days.map(d => daily[d]?.pct || 0);
+    const vals = workDays.map(d => daily[d]?.pct || 0);
     if (!vals.length) return 0;
     return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
   };
@@ -230,11 +233,11 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-x-auto">
-      <table className="w-full border-collapse" style={{ minWidth: `${180 + days.length * 60}px` }}>
+      <table className="w-full border-collapse" style={{ minWidth: `${300 + allDays.length * 56}px` }}>
         <thead>
           {/* Month row */}
           <tr className="bg-slate-50 border-b border-gray-100">
-            <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 w-40 border-r border-gray-100" colSpan={2} />
+            <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 border-r border-gray-100" colSpan={2} />
             {monthGroups.map((g, i) => (
               <th key={i} colSpan={g.count} className="px-2 py-2 text-[11px] font-semibold text-gray-500 text-center border-r border-gray-100 last:border-r-0">
                 {g.label}
@@ -242,50 +245,57 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
             ))}
             <th className="px-3 py-2 text-[11px] font-semibold text-gray-500 text-center border-l border-gray-100">Avg</th>
           </tr>
-          {/* Day row */}
-          <tr className="bg-slate-50 border-b border-gray-200">
-            <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-400 uppercase tracking-wide border-r border-gray-100">Resource</th>
-            <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-400 uppercase tracking-wide border-r border-gray-100">Role</th>
-            {days.map(d => {
-              const { day, dow } = dayLabel(d);
+          {/* Day header row */}
+          <tr className="border-b border-gray-200">
+            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-400 uppercase tracking-wide border-r border-gray-100 bg-slate-50 w-36">Name</th>
+            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-400 uppercase tracking-wide border-r border-gray-100 bg-slate-50 w-28">Role</th>
+            {allDays.map(({ date, isWeekend }) => {
+              const { day, dow } = dayLabel(date);
               return (
-                <th key={d} className="px-1 py-2 text-center border-r border-gray-100 last:border-r-0 w-14">
-                  <div className="text-[10px] text-gray-400">{dow}</div>
-                  <div className="text-[11px] font-semibold text-gray-600">{day}</div>
+                <th key={date} className={`px-1 py-2 text-center border-r border-gray-100 last:border-r-0 w-12 ${isWeekend ? "bg-gray-100" : "bg-slate-50"}`}>
+                  <div className={`text-[10px] ${isWeekend ? "text-gray-300" : "text-gray-400"}`}>{dow}</div>
+                  <div className={`text-[11px] font-semibold ${isWeekend ? "text-gray-300" : "text-gray-600"}`}>{day}</div>
                 </th>
               );
             })}
-            <th className="px-3 py-2 text-[10px] font-medium text-gray-400 uppercase tracking-wide text-center border-l border-gray-100">Total</th>
+            <th className="px-3 py-2 text-[10px] font-medium text-gray-400 uppercase tracking-wide text-center border-l border-gray-100 bg-slate-50">Avg</th>
           </tr>
         </thead>
         <tbody>
           {people.map((person, idx) => {
-            const daily = allocations[person.id] || {};
-            const avg   = avgPct(person.id);
+            const daily    = allocations[person.id] || {};
+            const avg      = avgPct(person.id);
             const avgStyle = cellStyle(avg);
-            const rowBg = idx % 2 === 0 ? "bg-white" : "bg-slate-50/40";
+            const rowBg    = idx % 2 === 0 ? "" : "bg-slate-50/30";
             return (
-              <tr key={person.id} className={`border-b border-gray-50 hover:bg-blue-50/30 transition ${rowBg}`}>
+              <tr key={person.id} className={`border-b border-gray-50 hover:bg-blue-50/20 transition ${rowBg}`}>
                 {/* Resource */}
-                <td className="px-3 py-2 border-r border-gray-100">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${getBand(avg).bar}`}>
+                <td className="px-2 py-2.5 border-r border-gray-100 w-36">
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 ${getBand(avg).bar}`}>
                       {initials(person.name)}
                     </div>
-                    <span className="text-[12px] font-medium text-navy truncate">{person.name}</span>
+                    <span className="text-[11px] font-medium text-navy truncate">{person.name}</span>
                   </div>
                 </td>
                 {/* Role */}
-                <td className="px-3 py-2 text-[11px] text-gray-500 border-r border-gray-100 whitespace-nowrap">
+                <td className="px-2 py-2.5 text-[11px] text-gray-500 border-r border-gray-100 w-28 truncate max-w-[112px]">
                   {person.jobTitle || person.role || "—"}
                 </td>
-                {/* Daily cells */}
-                {days.map(d => {
-                  const cell = daily[d];
+                {/* Day cells */}
+                {allDays.map(({ date, isWeekend }) => {
+                  if (isWeekend) {
+                    return (
+                      <td key={date} className="border-r border-gray-100 text-center bg-gray-100/70">
+                        <span className="text-[10px] text-gray-300">—</span>
+                      </td>
+                    );
+                  }
+                  const cell = daily[date];
                   const pct  = cell?.pct || 0;
                   const s    = cellStyle(pct);
                   return (
-                    <td key={d} className={`border-r border-gray-100 last:border-r-0 text-center ${s.bg}`}>
+                    <td key={date} className={`border-r border-gray-100 text-center py-2.5 ${s.bg}`}>
                       <span className={`text-[11px] font-medium ${s.text}`}>
                         {pct > 0 ? `${pct}%` : "—"}
                       </span>
@@ -293,14 +303,18 @@ function AllocationGrid({ people, tasks, windowStart, windowEnd }) {
                   );
                 })}
                 {/* Avg */}
-                <td className={`px-3 py-2 text-center border-l border-gray-100 ${avgStyle.bg}`}>
+                <td className={`px-3 py-2.5 text-center border-l border-gray-100 ${avgStyle.bg}`}>
                   <span className={`text-[12px] font-bold ${avgStyle.text}`}>{avg > 0 ? `${avg}%` : "—"}</span>
                 </td>
               </tr>
             );
           })}
           {people.length === 0 && (
-            <tr><td colSpan={days.length + 3} className="px-4 py-8 text-center text-gray-400 text-sm">No team members found.</td></tr>
+            <tr>
+              <td colSpan={allDays.length + 3} className="px-4 py-8 text-center text-gray-400 text-sm">
+                No team members found.
+              </td>
+            </tr>
           )}
         </tbody>
       </table>

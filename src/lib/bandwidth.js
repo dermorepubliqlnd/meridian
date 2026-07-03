@@ -50,8 +50,20 @@ export function getWorkingDaysInRange(startStr, endStr) {
   const cur = new Date(startStr + "T00:00:00");
   const end = new Date(endStr  + "T00:00:00");
   while (cur <= end) {
-    const dow = cur.getDay(); // 0=Sun, 6=Sat
+    const dow = cur.getDay();
     if (dow !== 0 && dow !== 6) days.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
+/** Returns ALL calendar days (including weekends) in [startStr, endStr] */
+export function getAllDaysInRange(startStr, endStr) {
+  const days = [];
+  const cur = new Date(startStr + "T00:00:00");
+  const end = new Date(endStr   + "T00:00:00");
+  while (cur <= end) {
+    days.push({ date: cur.toISOString().slice(0, 10), isWeekend: cur.getDay() === 0 || cur.getDay() === 6 });
     cur.setDate(cur.getDate() + 1);
   }
   return days;
