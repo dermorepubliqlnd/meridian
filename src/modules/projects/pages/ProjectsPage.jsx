@@ -377,14 +377,19 @@ export default function ProjectsPage() {
           + New Project
         </Link>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 text-xs text-gray-500 mb-3">
-        <span><strong className="text-navy font-semibold">{rows.filter(r => ["Planning","Design","Development","Delivery","Evaluation","Paused"].includes(r.p.status)).length}</strong> Active</span>
-        <span>·</span>
-        <span><strong className="text-amber-600 font-semibold">{rows.filter(r => r.health?.label === "At Risk").length}</strong> At Risk</span>
-        <span>·</span>
-        <span><strong className="text-red-600 font-semibold">{rows.filter(r => r.health?.label === "Behind Schedule" || r.health?.label?.includes("Delayed")).length}</strong> Behind</span>
-        <span>·</span>
-        <span><strong className="text-emerald-600 font-semibold">{rows.filter(r => ["Done","Canceled","Merged"].includes(r.p.status)).length}</strong> Done</span>
+      <div className="flex flex-wrap gap-3 mb-4">
+        {[
+          { label: "Active",   count: rows.filter(r => r.p.status === "Active").length,                          color: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200" },
+          { label: "At Risk",  count: rows.filter(r => r.health?.label === "At Risk").length,                    color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
+          { label: "Behind",   count: rows.filter(r => r.health?.label === "Behind Schedule").length,            color: "text-red-600",     bg: "bg-red-50",     border: "border-red-200" },
+          { label: "On Hold",  count: rows.filter(r => r.p.status === "On Hold").length,                         color: "text-gray-600",    bg: "bg-gray-100",   border: "border-gray-200" },
+          { label: "Done",     count: rows.filter(r => r.p.status === "Done" || r.p.status === "Canceled").length, color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
+        ].map(({ label, count, color, bg, border }) => (
+          <div key={label} className={`flex flex-col items-center px-4 py-2 rounded-lg border ${bg} ${border} min-w-[72px]`}>
+            <span className={`text-xl font-bold font-heading ${color}`}>{count}</span>
+            <span className="text-[11px] text-gray-500 mt-0.5">{label}</span>
+          </div>
+        ))}
       </div>
 
       <div className="flex items-center gap-2 mb-3 relative">
