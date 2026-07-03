@@ -377,9 +377,15 @@ export default function ProjectsPage() {
           + New Project
         </Link>
       </div>
-      <p className="text-xs text-gray-500 mb-3">
-        Click a header to sort · drag header to reorder columns · drag right edge to resize · use Columns to show/hide.
-      </p>
+      <div className="flex flex-wrap items-center gap-x-4 text-xs text-gray-500 mb-3">
+        <span><strong className="text-navy font-semibold">{rows.filter(r => ["Planning","Design","Development","Delivery","Evaluation","Paused"].includes(r.p.status)).length}</strong> Active</span>
+        <span>·</span>
+        <span><strong className="text-amber-600 font-semibold">{rows.filter(r => r.health?.label === "At Risk").length}</strong> At Risk</span>
+        <span>·</span>
+        <span><strong className="text-red-600 font-semibold">{rows.filter(r => r.health?.label === "Behind Schedule" || r.health?.label?.includes("Delayed")).length}</strong> Behind</span>
+        <span>·</span>
+        <span><strong className="text-emerald-600 font-semibold">{rows.filter(r => ["Done","Canceled","Merged"].includes(r.p.status)).length}</strong> Done</span>
+      </div>
 
       <div className="flex items-center gap-2 mb-3 relative">
         <div className="relative">
