@@ -146,6 +146,71 @@ const DEFAULT_BOARD_CONFIG = {
   cardFields: DEFAULT_CARD_FIELDS,
 };
 
+// ── Filter system ─────────────────────────────────────────────────────────────
+const FILTER_FIELDS = [
+  { key: "status",     label: "Status",       type: "select",  options: ["Not Started","Active","On Hold","Done","Canceled"] },
+  { key: "phase",      label: "Phase",        type: "select",  options: ["Scoping","Planning","Design","Development","Review","Implementation","Evaluation"] },
+  { key: "health",     label: "Health",       type: "select",  options: ["On Track","At Risk","Behind Schedule","On Hold","Scoping","Not Started"] },
+  { key: "priority",   label: "Priority",     type: "select",  options: ["High","Medium","Low"] },
+  { key: "ownerId",    label: "Owner",        type: "user"  },
+  { key: "completion", label: "Completion %", type: "number"  },
+  { key: "baselineEndDate", label: "End Date", type: "date"  },
+];
+
+const SELECT_OPERATORS  = ["is","is not","is any of"];
+const NUMBER_OPERATORS  = [">","<","=",">=","<="];
+const DATE_OPERATORS    = ["is before","is after","is on"];
+
+function operatorsFor(fieldDef) {
+  if (!fieldDef) return [];
+  if (fieldDef.type === "number") return NUMBER_OPERATORS;
+  if (fieldDef.type === "date")   return DATE_OPERATORS;
+  return SELECT_OPERATORS;
+}
+
+function applyFilters(rows, filters, nameFor) {
+  if (!filters.length) return rows;
+  return rows.filter(({ p, health, completionPct }) => {
+    return filters.every(({ field, operator, value }) => {
+      if (!value && value !== 0) return true;
+      const fieldDef = FILTER_FIELDS.find(f => f.key === field);
+      if (!fieldDef) return true;
+
+      let actual;
+      if (field === "health")      actual = health.label;
+      else if (field === "completion") actual = Math.round(completionPct);
+      else if (field === "ownerId") actual = p.ownerId;
+      else if (field === "status") {
+        const s = p.status;
+        actual = PROJECT_STATUSES.includes(s) ? s : (s ? migrateLegacyStatus(s).status : "Not Started");
+      } else {
+        actual = p[field] ?? "";
+      }
+
+      if (fieldDef.type === "number") {
+        const n = Number(value);
+        if (operator === ">")  return actual > n;
+        if (operator === "<")  return actual < n;
+        if (operator === "=")  return actual === n;
+        if (operator === ">=") return actual >= n;
+        if (operator === "<=") return actual <= n;
+      }
+      if (fieldDef.type === "date") {
+        if (operator === "is before") return actual && actual < value;
+        if (operator === "is after")  return actual && actual > value;
+        if (operator === "is on")     return actual === value;
+      }
+      // select / user
+      if (operator === "is any of") {
+        const vals = Array.isArray(value) ? value : [value];
+        return vals.includes(actual);
+      }
+      if (operator === "is not") return actual !== value;
+      return actual === value; // "is"
+    });
+  });
+}
+
 // ── View type icons ───────────────────────────────────────────────────────────
 const VIEW_ICONS = {
   list:     "☰",
@@ -256,6 +321,193 @@ function CellDisplay({ colKey, p, health, completionPct, nameFor, overdueCount }
 }
 
 // ── Board view ────────────────────────────────────────────────────────────────
+// ── Filter builder dropdown ───────────────────────────────────────────────────
+function FilterBuilder({ users, existingFilter, onAdd, onClose }) {
+  const [field, setField]       = useState(existingFilter?.field || "");
+  const [operator, setOperator] = useState(existingFilter?.operator || "");
+  const [value, setValue]       = useState(existingFilter?.value || "");
+
+  const fieldDef  = FILTER_FIELDS.find(f => f.key === field);
+  const operators = operatorsFor(fieldDef);
+
+  const handleFieldChange = (f) => {
+    setField(f);
+    const def = FILTER_FIELDS.find(fd => fd.key === f);
+    setOperator(operatorsFor(def)[0] || "");
+    setValue("");
+  };
+
+  const isValid = field && operator && (value !== "" || operator === "is any of");
+
+  const renderValueInput = () => {
+    if (!fieldDef) return null;
+    if (fieldDef.type === "user") {
+      return (
+        <select value={value} onChange={e => setValue(e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+          <option value="">Select person…</option>
+          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      );
+    }
+    if (fieldDef.type === "select") {
+      if (operator === "is any of") {
+        const selected = Array.isArray(value) ? value : [];
+        return (
+          <div className="border border-gray-200 rounded p-2 max-h-36 overflow-y-auto">
+            {fieldDef.options.map(opt => (
+              <label key={opt} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => {
+                    const next = selected.includes(opt)
+                      ? selected.filter(v => v !== opt)
+                      : [...selected, opt];
+                    setValue(next);
+                  }}
+                />
+                {opt}
+              </label>
+            ))}
+          </div>
+        );
+      }
+      return (
+        <select value={value} onChange={e => setValue(e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+          <option value="">Select…</option>
+          {fieldDef.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      );
+    }
+    if (fieldDef.type === "number") {
+      return (
+        <input
+          type="number" min={0} max={100} value={value}
+          onChange={e => setValue(e.target.value)}
+          placeholder="e.g. 50"
+          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+        />
+      );
+    }
+    if (fieldDef.type === "date") {
+      return (
+        <input
+          type="date" value={value}
+          onChange={e => setValue(e.target.value)}
+          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+        />
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="absolute z-30 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl p-3 flex flex-col gap-2">
+      {/* Field */}
+      <select value={field} onChange={e => handleFieldChange(e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+        <option value="">Select field…</option>
+        {FILTER_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+      </select>
+      {/* Operator */}
+      {field && (
+        <select value={operator} onChange={e => setOperator(e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+          {operators.map(op => <option key={op} value={op}>{op}</option>)}
+        </select>
+      )}
+      {/* Value */}
+      {field && operator && renderValueInput()}
+      {/* Actions */}
+      <div className="flex gap-2 justify-end pt-1">
+        <button onClick={onClose} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancel</button>
+        <button
+          disabled={!isValid}
+          onClick={() => onAdd({ field, operator, value })}
+          className="text-xs bg-navy text-white px-3 py-1 rounded-md hover:bg-navy-light disabled:opacity-40"
+        >
+          {existingFilter ? "Update" : "Add filter"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Filter bar ────────────────────────────────────────────────────────────────
+function FilterBar({ filters, setFilters, users }) {
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [editingId,   setEditingId]   = useState(null);
+
+  const addFilter = (f) => {
+    setFilters(prev => [...prev, { id: Date.now(), ...f }]);
+    setShowBuilder(false);
+  };
+  const updateFilter = (id, f) => {
+    setFilters(prev => prev.map(x => x.id === id ? { ...x, ...f } : x));
+    setEditingId(null);
+  };
+  const removeFilter = (id) => setFilters(prev => prev.filter(x => x.id !== id));
+  const clearAll     = ()   => setFilters([]);
+
+  const chipLabel = ({ field, operator, value }) => {
+    const def = FILTER_FIELDS.find(f => f.key === field);
+    const fieldLabel = def?.label || field;
+    let valLabel = Array.isArray(value) ? value.join(", ") : value;
+    if (def?.type === "user") {
+      valLabel = users.find(u => u.id === value)?.name || value;
+    }
+    return `${fieldLabel} ${operator} ${valLabel}`;
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap mb-3">
+      {filters.map(f => (
+        <div key={f.id} className="relative">
+          <div
+            className="flex items-center gap-1.5 text-xs bg-teal-50 border border-teal-200 text-teal-800 rounded-full pl-3 pr-1.5 py-1 cursor-pointer hover:bg-teal-100"
+            onClick={() => setEditingId(editingId === f.id ? null : f.id)}
+          >
+            <span>{chipLabel(f)}</span>
+            <button
+              onClick={e => { e.stopPropagation(); removeFilter(f.id); }}
+              className="text-teal-400 hover:text-red-500 font-bold leading-none"
+            >×</button>
+          </div>
+          {editingId === f.id && (
+            <FilterBuilder
+              users={users}
+              existingFilter={f}
+              onAdd={(updated) => updateFilter(f.id, updated)}
+              onClose={() => setEditingId(null)}
+            />
+          )}
+        </div>
+      ))}
+
+      {/* Add filter button */}
+      <div className="relative">
+        <button
+          onClick={() => { setShowBuilder(s => !s); setEditingId(null); }}
+          className="text-xs text-gray-500 hover:text-navy border border-dashed border-gray-300 rounded-full px-3 py-1 hover:border-navy transition"
+        >
+          + Add filter
+        </button>
+        {showBuilder && (
+          <FilterBuilder
+            users={users}
+            onAdd={addFilter}
+            onClose={() => setShowBuilder(false)}
+          />
+        )}
+      </div>
+
+      {filters.length > 0 && (
+        <button onClick={clearAll} className="text-xs text-gray-400 hover:text-red-500 underline ml-1">
+          Clear all
+        </button>
+      )}
+    </div>
+  );
+}
+
 function BoardView({ rows, nameFor, boardConfig }) {
   const { groupBy, sortBy, sortDir, cardFields } = boardConfig;
 
@@ -462,6 +714,7 @@ export default function ProjectsPage() {
   const [activeViewName, setActiveViewName] = useState(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showViewsMenu, setShowViewsMenu] = useState(false);
+  const [filters, setFilters]           = useState([]);
   const [boardConfig, setBoardConfig] = useState(DEFAULT_BOARD_CONFIG);
   const [showBoardFieldsMenu, setShowBoardFieldsMenu] = useState(false);
 
@@ -529,6 +782,7 @@ export default function ProjectsPage() {
     });
   }, [projects, tasksByProject, today]);
 
+  const filteredRows   = useMemo(() => applyFilters(rows, filters, nameFor), [rows, filters, users]);
   const visibleColumns = table.columnOrder.filter((k) => !table.hiddenColumns.has(k));
 
   const sortRows = (list) => {
@@ -543,7 +797,7 @@ export default function ProjectsPage() {
   };
 
   const groups = useMemo(() => {
-    if (table.groupBy === "none") return [{ label: null, rows: sortRows(rows) }];
+    if (table.groupBy === "none") return [{ label: null, rows: sortRows(filteredRows) }];
     const groupKeyFor = (row) => {
       if (table.groupBy === "status") {
         const s = row.p.status;
@@ -558,7 +812,7 @@ export default function ProjectsPage() {
       return "";
     };
     const map = new Map();
-    rows.forEach((row) => {
+    filteredRows.forEach((row) => {
       const k = groupKeyFor(row);
       if (!map.has(k)) map.set(k, []);
       map.get(k).push(row);
@@ -650,9 +904,13 @@ export default function ProjectsPage() {
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
+  // ── Fields panel state ────────────────────────────────────────────────────
+  const [showFieldsPanel, setShowFieldsPanel] = useState(false);
+
   return (
-    <div>
-      {/* Header */}
+    <div className="flex flex-col h-full" onClick={() => { setShowColumnsMenu(false); setShowBoardFieldsMenu(false); }}>
+
+      {/* ── Page header ── */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xl font-bold font-heading text-navy">Projects</h2>
         <Link
@@ -663,7 +921,7 @@ export default function ProjectsPage() {
         </Link>
       </div>
 
-      {/* Metric cards */}
+      {/* ── Metric cards ── */}
       <div className="flex flex-wrap gap-3 mb-4">
         {[
           { label: "Active",  count: rows.filter(r => r.p.status === "Active").length,                              color: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200"   },
@@ -679,10 +937,46 @@ export default function ProjectsPage() {
         ))}
       </div>
 
-      {/* ── View switcher bar ── */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        {/* View type buttons */}
-        <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs font-medium bg-white">
+      {/* ── View tabs (Airtable/Notion style) ── */}
+      <div className="flex items-end gap-0 border-b border-gray-200 mb-0">
+        {/* Default "All Projects" tab + saved view tabs */}
+        <button
+          onClick={() => { setActiveViewId(null); setActiveViewName(null); setViewType("list"); setFilters([]); setTable(loadTableState()); }}
+          className={`px-4 py-2 text-xs font-medium border-b-2 transition whitespace-nowrap ${
+            !activeViewId ? "border-navy text-navy" : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          All Projects
+        </button>
+        {savedViews.map((sv) => (
+          <button
+            key={sv.id}
+            onClick={() => handleLoadView(sv)}
+            className={`px-4 py-2 text-xs font-medium border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+              activeViewId === sv.id ? "border-navy text-navy" : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <span>{VIEW_ICONS[sv.viewType] || "☰"}</span>
+            <span>{sv.name}</span>
+            <span
+              onClick={(e) => handleDeleteView(e, sv.id)}
+              className="text-gray-300 hover:text-red-400 leading-none ml-0.5"
+              title="Delete view"
+            >×</span>
+          </button>
+        ))}
+        <button
+          onClick={() => setShowSaveModal(true)}
+          className="px-3 py-2 text-xs text-gray-400 hover:text-teal-700 border-b-2 border-transparent transition whitespace-nowrap"
+        >
+          + Save view
+        </button>
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-2 py-2 border-b border-gray-100 mb-3 flex-wrap bg-white">
+        {/* View type toggle */}
+        <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs font-medium">
           {[
             { key: "list",     label: "List"     },
             { key: "board",    label: "Board"    },
@@ -691,11 +985,9 @@ export default function ProjectsPage() {
           ].map((v) => (
             <button
               key={v.key}
-              onClick={() => { setViewType(v.key); setActiveViewId(null); setActiveViewName(null); }}
+              onClick={(e) => { e.stopPropagation(); setViewType(v.key); }}
               className={`px-3 py-1.5 border-r border-gray-200 last:border-r-0 transition ${
-                viewType === v.key
-                  ? "bg-navy text-white"
-                  : "hover:bg-slate-50 text-gray-600"
+                viewType === v.key ? "bg-navy text-white" : "hover:bg-slate-50 text-gray-600"
               }`}
             >
               {VIEW_ICONS[v.key]} {v.label}
@@ -703,190 +995,90 @@ export default function ProjectsPage() {
           ))}
         </div>
 
-        {/* Saved views dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowViewsMenu((s) => !s)}
-            className="text-xs font-medium bg-white border border-gray-200 rounded-md px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1"
-          >
-            {activeViewName
-              ? <span className="text-navy font-semibold">{activeViewName}</span>
-              : <span className="text-gray-500">Saved views</span>}
-            <span className="text-gray-400">▾</span>
-          </button>
-          {showViewsMenu && (
-            <div className="absolute z-20 mt-1 w-56 bg-white border border-gray-200 rounded-md shadow-lg py-1">
-              {savedViews.length === 0 && (
-                <p className="text-xs text-gray-400 px-3 py-2">No saved views yet.</p>
-              )}
-              {savedViews.map((sv) => (
-                <div
-                  key={sv.id}
-                  onClick={() => handleLoadView(sv)}
-                  className={`flex items-center justify-between px-3 py-1.5 text-xs cursor-pointer hover:bg-slate-50 ${
-                    activeViewId === sv.id ? "text-navy font-semibold" : "text-gray-700"
-                  }`}
-                >
-                  <span className="truncate">
-                    {VIEW_ICONS[sv.viewType] || "☰"} {sv.name}
-                  </span>
-                  <button
-                    onClick={(e) => handleDeleteView(e, sv.id)}
-                    className="text-gray-300 hover:text-red-400 ml-2 flex-shrink-0"
-                    title="Delete view"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="w-px h-5 bg-gray-200 mx-1" />
 
-        {/* Save current view */}
-        <button
-          onClick={() => setShowSaveModal(true)}
-          className="text-xs font-medium bg-white border border-gray-200 rounded-md px-3 py-1.5 hover:bg-slate-50 text-teal-700"
-        >
-          + Save view
-        </button>
+        {/* Filter — always visible */}
+        <FilterBar filters={filters} setFilters={setFilters} users={users} />
 
-        {/* List-view controls */}
+        {/* List-view extras */}
         {viewType === "list" && (
           <>
-            <div className="relative">
-              <button
-                onClick={() => setShowColumnsMenu((s) => !s)}
-                className="text-xs font-medium bg-white border border-gray-200 rounded-md px-3 py-1.5 hover:bg-slate-50"
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+
+            {/* Group by */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400">Group</span>
+              <select
+                value={table.groupBy}
+                onChange={(e) => { e.stopPropagation(); setTable((t) => ({ ...t, groupBy: e.target.value })); }}
+                onClick={e => e.stopPropagation()}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs"
               >
-                Columns
-              </button>
-              {showColumnsMenu && (
-                <div className="absolute z-10 mt-1 w-56 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg p-2">
-                  {COLUMN_DEFS.map((c) => (
-                    <label key={c.key} className="flex items-center gap-2 text-xs px-2 py-1 hover:bg-slate-50 rounded">
-                      <input type="checkbox" checked={!table.hiddenColumns.has(c.key)} onChange={() => toggleColumn(c.key)} />
-                      {c.label}
-                    </label>
-                  ))}
-                </div>
-              )}
+                <option value="none">None</option>
+                <option value="status">Status</option>
+                <option value="phase">Phase</option>
+                <option value="health">Health</option>
+                <option value="ownerId">Owner</option>
+              </select>
             </div>
 
-            <select
-              value={table.groupBy}
-              onChange={(e) => setTable((t) => ({ ...t, groupBy: e.target.value }))}
-              className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-            >
-              <option value="none">No grouping</option>
-              <option value="status">Group by Status</option>
-              <option value="phase">Group by Phase</option>
-              <option value="health">Group by Health</option>
-              <option value="ownerId">Group by Owner</option>
-            </select>
+            {/* Sort */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400">Sort</span>
+              <select
+                value={table.sortKey}
+                onChange={(e) => { e.stopPropagation(); setTable(t => ({ ...t, sortKey: e.target.value })); }}
+                onClick={e => e.stopPropagation()}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs"
+              >
+                {COLUMN_DEFS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+              <button
+                onClick={(e) => { e.stopPropagation(); setTable(t => ({ ...t, sortDir: t.sortDir === "asc" ? "desc" : "asc" })); }}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white hover:bg-slate-50 text-xs"
+              >
+                {table.sortDir === "asc" ? "↑" : "↓"}
+              </button>
+            </div>
 
-            <button onClick={resetView} className="text-xs text-gray-400 hover:text-gray-600 underline">
-              Reset view
+            {/* Fields (slide-in panel trigger) */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowFieldsPanel(s => !s); }}
+              className={`text-xs font-medium border rounded-md px-3 py-1.5 transition ${showFieldsPanel ? "bg-navy text-white border-navy" : "bg-white border-gray-200 hover:bg-slate-50"}`}
+            >
+              Fields
+            </button>
+
+            <button
+              onClick={(e) => { e.stopPropagation(); resetView(); }}
+              className="text-xs text-gray-400 hover:text-gray-600 underline ml-auto"
+            >
+              Reset
             </button>
           </>
         )}
 
-        {/* Active view label */}
-        {activeViewName && (
-          <span className="ml-auto text-xs text-gray-400 italic">Viewing: {activeViewName}</span>
-        )}
-      </div>
-
-      {/* ── View content ── */}
-      {viewType === "list" && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-x-auto">
-          <div style={{ minWidth: "max-content" }}>
-            <div
-              className="grid bg-slate-50 text-[10px] text-gray-400 uppercase tracking-wide font-medium border-b border-gray-100"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              {visibleColumns.map((key) => {
-                const col = COLUMN_DEFS.find((c) => c.key === key);
-                return (
-                  <div
-                    key={key}
-                    draggable
-                    onDragStart={handleDragStart(key)}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop(key)}
-                    onClick={() => toggleSort(key)}
-                    className="relative px-3 py-2 cursor-pointer select-none flex items-center gap-1 hover:bg-slate-100 border-r border-gray-100 last:border-r-0"
-                    title="Click to sort · drag to reorder · drag right edge to resize"
-                  >
-                    <span className="truncate">{col.label}</span>
-                    {table.sortKey === key && <span>{table.sortDir === "asc" ? "▲" : "▼"}</span>}
-                    <div
-                      onMouseDown={startResize(key)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-teal-300"
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            {groups.map((group) => (
-              <div key={group.label ?? "all"}>
-                {group.label !== null && (
-                  <div className={`px-3 py-1.5 text-[12px] font-semibold text-navy border-b border-gray-100 ${GROUP_HEADER_ACCENT[group.label] || GROUP_HEADER_DEFAULT}`}>
-                    {group.label}{" "}
-                    <span className="text-gray-400 font-normal text-[11px]">({group.rows.length})</span>
-                  </div>
-                )}
-                {group.rows.map(({ p, health, completionPct, overdueCount }) => (
-                  <div
-                    key={p.id}
-                    className="grid text-[13px] border-b border-gray-50 hover:bg-slate-50"
-                    style={{ gridTemplateColumns: gridTemplate }}
-                  >
-                    {visibleColumns.map((key) => (
-                      <div key={key} className="px-3 py-2 overflow-hidden text-ellipsis whitespace-nowrap">
-                        <CellDisplay colKey={key} p={p} health={health} completionPct={completionPct} nameFor={nameFor} overdueCount={overdueCount} />
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ))}
-
-            {projects.length === 0 && (
-              <div className="px-4 py-8 text-center text-gray-400 text-sm">
-                No projects yet. Click "+ New Project" to create one from a WBS template.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {viewType === "board" && (
-        <>
-          {/* Board toolbar */}
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            {/* Group by */}
+        {/* Board-view extras */}
+        {viewType === "board" && (
+          <>
+            <div className="w-px h-5 bg-gray-200 mx-1" />
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-400 font-medium">Group by</span>
+              <span className="text-gray-400">Group</span>
               <select
                 value={boardConfig.groupBy}
-                onChange={(e) => setBoardConfig(c => ({ ...c, groupBy: e.target.value }))}
+                onChange={(e) => { e.stopPropagation(); setBoardConfig(c => ({ ...c, groupBy: e.target.value })); }}
+                onClick={e => e.stopPropagation()}
                 className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs"
               >
-                {BOARD_GROUP_OPTIONS.map(o => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
+                {BOARD_GROUP_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
             </div>
-
-            {/* Sort within columns */}
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-400 font-medium">Sort</span>
+              <span className="text-gray-400">Sort</span>
               <select
                 value={boardConfig.sortBy}
-                onChange={(e) => setBoardConfig(c => ({ ...c, sortBy: e.target.value }))}
+                onChange={(e) => { e.stopPropagation(); setBoardConfig(c => ({ ...c, sortBy: e.target.value })); }}
+                onClick={e => e.stopPropagation()}
                 className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-xs"
               >
                 <option value="name">Name</option>
@@ -895,24 +1087,21 @@ export default function ProjectsPage() {
                 <option value="endDate">End Date</option>
               </select>
               <button
-                onClick={() => setBoardConfig(c => ({ ...c, sortDir: c.sortDir === "asc" ? "desc" : "asc" }))}
-                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white hover:bg-slate-50"
-                title="Toggle sort direction"
+                onClick={(e) => { e.stopPropagation(); setBoardConfig(c => ({ ...c, sortDir: c.sortDir === "asc" ? "desc" : "asc" })); }}
+                className="border border-gray-200 rounded-md px-2 py-1.5 bg-white hover:bg-slate-50 text-xs"
               >
-                {boardConfig.sortDir === "asc" ? "▲" : "▼"}
+                {boardConfig.sortDir === "asc" ? "↑" : "↓"}
               </button>
             </div>
-
-            {/* Card fields */}
             <div className="relative">
               <button
-                onClick={() => setShowBoardFieldsMenu(s => !s)}
-                className="text-xs font-medium bg-white border border-gray-200 rounded-md px-3 py-1.5 hover:bg-slate-50"
+                onClick={(e) => { e.stopPropagation(); setShowBoardFieldsMenu(s => !s); }}
+                className={`text-xs font-medium border rounded-md px-3 py-1.5 transition ${showBoardFieldsMenu ? "bg-navy text-white border-navy" : "bg-white border-gray-200 hover:bg-slate-50"}`}
               >
                 Card fields
               </button>
               {showBoardFieldsMenu && (
-                <div className="absolute z-10 mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg p-2">
+                <div className="absolute z-10 mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg p-2" onClick={e => e.stopPropagation()}>
                   {CARD_FIELD_DEFS.map(f => (
                     <label key={f.key} className="flex items-center gap-2 text-xs px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
                       <input
@@ -930,12 +1119,113 @@ export default function ProjectsPage() {
                 </div>
               )}
             </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Fields side panel + main content ── */}
+      <div className="flex gap-3 flex-1 min-h-0">
+
+        {/* Fields panel (slides in from right of toolbar, left of table edge) */}
+        {showFieldsPanel && viewType === "list" && (
+          <div className="w-56 flex-shrink-0 bg-white border border-gray-200 rounded-lg shadow-sm p-3 flex flex-col gap-1 self-start" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-navy">Fields</span>
+              <button onClick={() => setShowFieldsPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">×</button>
+            </div>
+            <p className="text-[10px] text-gray-400 mb-2">Shown</p>
+            {COLUMN_DEFS.filter(c => !table.hiddenColumns.has(c.key)).map(c => (
+              <label key={c.key} className="flex items-center gap-2 text-xs px-1 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                <input type="checkbox" checked={true} onChange={() => toggleColumn(c.key)} />
+                <span className="text-gray-700">{c.label}</span>
+              </label>
+            ))}
+            <p className="text-[10px] text-gray-400 mt-3 mb-2">Hidden</p>
+            {COLUMN_DEFS.filter(c => table.hiddenColumns.has(c.key)).map(c => (
+              <label key={c.key} className="flex items-center gap-2 text-xs px-1 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                <input type="checkbox" checked={false} onChange={() => toggleColumn(c.key)} />
+                <span className="text-gray-400">{c.label}</span>
+              </label>
+            ))}
           </div>
-          <BoardView rows={rows} nameFor={nameFor} boardConfig={boardConfig} />
-        </>
-      )}
-      {viewType === "timeline" && <ComingSoonView viewName="timeline" />}
-      {viewType === "calendar" && <ComingSoonView viewName="calendar" />}
+        )}
+
+        {/* Main view */}
+        <div className="flex-1 min-w-0">
+          {viewType === "list" && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-x-auto">
+              <div style={{ minWidth: "max-content" }}>
+                <div
+                  className="grid bg-slate-50 text-[10px] text-gray-400 uppercase tracking-wide font-medium border-b border-gray-100"
+                  style={{ gridTemplateColumns: gridTemplate }}
+                >
+                  {visibleColumns.map((key) => {
+                    const col = COLUMN_DEFS.find((c) => c.key === key);
+                    return (
+                      <div
+                        key={key}
+                        draggable
+                        onDragStart={handleDragStart(key)}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop(key)}
+                        onClick={() => toggleSort(key)}
+                        className="relative px-3 py-2 cursor-pointer select-none flex items-center gap-1 hover:bg-slate-100 border-r border-gray-100 last:border-r-0"
+                        title="Click to sort · drag to reorder · drag right edge to resize"
+                      >
+                        <span className="truncate">{col.label}</span>
+                        {table.sortKey === key && <span>{table.sortDir === "asc" ? "▲" : "▼"}</span>}
+                        <div
+                          onMouseDown={startResize(key)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-teal-300"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {groups.map((group) => (
+                  <div key={group.label ?? "all"}>
+                    {group.label !== null && (
+                      <div className={`px-3 py-1.5 text-[12px] font-semibold text-navy border-b border-gray-100 ${GROUP_HEADER_ACCENT[group.label] || GROUP_HEADER_DEFAULT}`}>
+                        {group.label}{" "}
+                        <span className="text-gray-400 font-normal text-[11px]">({group.rows.length})</span>
+                      </div>
+                    )}
+                    {group.rows.map(({ p, health, completionPct, overdueCount }) => (
+                      <div
+                        key={p.id}
+                        className="grid text-[13px] border-b border-gray-50 hover:bg-slate-50"
+                        style={{ gridTemplateColumns: gridTemplate }}
+                      >
+                        {visibleColumns.map((key) => (
+                          <div key={key} className="px-3 py-2 overflow-hidden text-ellipsis whitespace-nowrap">
+                            <CellDisplay colKey={key} p={p} health={health} completionPct={completionPct} nameFor={nameFor} overdueCount={overdueCount} />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+
+                {filteredRows.length === 0 && (
+                  <div className="px-4 py-8 text-center text-gray-400 text-sm">
+                    {filters.length > 0
+                      ? "No projects match the current filters."
+                      : `No projects yet. Click "+ New Project" to create one from a WBS template.`}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {viewType === "board" && (
+            <BoardView rows={filteredRows} nameFor={nameFor} boardConfig={boardConfig} />
+          )}
+          {viewType === "timeline" && <ComingSoonView viewName="timeline" />}
+          {viewType === "calendar" && <ComingSoonView viewName="calendar" />}
+        </div>
+      </div>
 
       {/* Save view modal */}
       {showSaveModal && (
