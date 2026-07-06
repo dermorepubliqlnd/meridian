@@ -112,7 +112,7 @@ function UtilBar({ used, total }) {
 
 // ── Team members section ──────────────────────────────────────────────────────
 
-function TeamMembersSection({ roleDemand, users, committedByUser, planningWeeks }) {
+function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks }) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -178,7 +178,15 @@ function TeamMembersSection({ roleDemand, users, committedByUser, planningWeeks 
                           <UtilBar used={committed} total={totalCap} />
                           <div className="flex justify-between text-[10px] text-gray-500">
                             <span><span className="font-semibold text-gray-700">{fmt(available)} hrs</span> free</span>
-                            <span><span className={`font-semibold ${overloaded ? "text-red-500" : "text-gray-600"}`}>{fmt(committed)} hrs</span> committed</span>
+                            <span>
+                              {(confirmedByUser[u.id] ?? 0) > 0 && (
+                                <span className="font-semibold text-red-500">{fmt(confirmedByUser[u.id])} </span>
+                              )}
+                              {(tentativeByUser[u.id] ?? 0) > 0 && (
+                                <span className="font-semibold text-amber-500">+{fmt(tentativeByUser[u.id])} </span>
+                              )}
+                              <span className="text-gray-400">committed</span>
+                            </span>
                             <span className="text-gray-400">{p}% used</span>
                           </div>
                         </div>
@@ -250,7 +258,11 @@ export default function ProjectRoleDemandPage() {
 
   useEffect(() => {
     return onSnapshot(collection(db, "projects"), (snap) =>
-      setAllProjects(snap.docs.map((d) => ({ id: d.id, status: d.data().status })))
+      setAllProjects(snap.docs.map((d) => ({
+        id: d.id,
+        status: d.data().status,
+        baselineStatus: d.data().baselineStatus,
+      })))
     );
   }, []);
 
@@ -281,23 +293,42 @@ export default function ProjectRoleDemandPage() {
 
   // ── Cross-project committed hours per user ────────────────────────────────
 
-  const committedByUser = useMemo(() => {
-    if (planningWeeks === null) return {};
+  // Split committed hours into:
+  //   confirmed  = baseline-approved projects (locked commitments)
+  //   tentative  = in-planning projects not yet approved (soft commitments)
+  const { confirmedByUser, tentativeByUser } = useMemo(() => {
+    if (planningWeeks === null) return { confirmedByUser: {}, tentativeByUser: {} };
     const ACTIVE = new Set(["Active", "WBS Pending", "Resource Check", "Pending Approval"]);
-    const otherActiveIds = new Set(
-      allProjects.filter((p) => ACTIVE.has(p.status) && p.id !== id).map((p) => p.id)
-    );
-    const map = {};
-    allAssignments
-      .filter((a) => otherActiveIds.has(a.projectId))
-      .forEach((a) => {
-        const user = users.find((u) => u.id === a.userId);
-        if (!user) return;
-        const hrs = (a.allocationPct / 100) * userWeeklyProjectHours(user) * planningWeeks;
-        map[a.userId] = (map[a.userId] ?? 0) + hrs;
+    const confirmed  = {};
+    const tentative  = {};
+
+    allProjects
+      .filter((p) => ACTIVE.has(p.status) && p.id !== id)
+      .forEach((proj) => {
+        const isLocked = proj.baselineStatus === "Approved";
+        allAssignments
+          .filter((a) => a.projectId === proj.id)
+          .forEach((a) => {
+            const user = users.find((u) => u.id === a.userId);
+            if (!user) return;
+            const hrs = (a.allocationPct / 100) * userWeeklyProjectHours(user) * planningWeeks;
+            if (isLocked) {
+              confirmed[a.userId] = (confirmed[a.userId] ?? 0) + hrs;
+            } else {
+              tentative[a.userId] = (tentative[a.userId] ?? 0) + hrs;
+            }
+          });
       });
-    return map;
+    return { confirmedByUser: confirmed, tentativeByUser: tentative };
   }, [allAssignments, allProjects, users, planningWeeks, id]);
+
+  // Combined for backward-compat in team member cards
+  const committedByUser = useMemo(() => {
+    const map = {};
+    Object.entries(confirmedByUser).forEach(([uid, h]) => { map[uid] = (map[uid] ?? 0) + h; });
+    Object.entries(tentativeByUser).forEach(([uid, h]) => { map[uid] = (map[uid] ?? 0) + h; });
+    return map;
+  }, [confirmedByUser, tentativeByUser]);
 
   // ── Role demand rows ──────────────────────────────────────────────────────
 
@@ -319,14 +350,16 @@ export default function ProjectRoleDemandPage() {
       .map(([role, needed]) => {
         const isSME     = role.trim().toLowerCase() === "sme";
         const matched   = matchUsersToRole(users, role);
-        const totalCap  = isSME ? 0 : matched.reduce((s, u) => s + userWeeklyProjectHours(u) * planningWeeks, 0);
-        const committed = isSME ? 0 : matched.reduce((s, u) => s + (committedByUser[u.id] ?? 0), 0);
-        const available = Math.max(0, totalCap - committed);
-        const gap       = available - needed;
-        const effortPct = totalHours > 0 ? ((needed / totalHours) * 100).toFixed(1) : "0.0";
-        return { role, needed, totalCap, committed, available, gap, effortPct, isSME };
+        const totalCap   = isSME ? 0 : matched.reduce((s, u) => s + userWeeklyProjectHours(u) * planningWeeks, 0);
+        const confirmed  = isSME ? 0 : matched.reduce((s, u) => s + (confirmedByUser[u.id] ?? 0), 0);
+        const tentative  = isSME ? 0 : matched.reduce((s, u) => s + (tentativeByUser[u.id] ?? 0), 0);
+        const committed  = confirmed + tentative;
+        const available  = Math.max(0, totalCap - committed);
+        const gap        = available - needed;
+        const effortPct  = totalHours > 0 ? ((needed / totalHours) * 100).toFixed(1) : "0.0";
+        return { role, needed, totalCap, confirmed, tentative, committed, available, gap, effortPct, isSME };
       });
-  }, [tasks, users, planningWeeks, committedByUser, recalcKey]);
+  }, [tasks, users, planningWeeks, confirmedByUser, tentativeByUser, recalcKey]);
 
   const totalNeeded    = roleDemand.reduce((s, r) => s + r.needed, 0);
   const totalAvailable = roleDemand.reduce((s, r) => s + r.available, 0);
@@ -436,7 +469,7 @@ export default function ProjectRoleDemandPage() {
               <table className="w-full min-w-[860px]">
                 <thead>
                   <tr className="bg-gray-50">
-                    {["Required Role", "WBS Hours", "% Effort", "Total Capacity", "Committed (Other Projects)", "Net Available", "Gap", "Status"].map((col) => (
+                    {["Required Role", "WBS Hours", "% Effort", "Total Capacity", "Confirmed Committed", "Tentative Committed", "Net Available", "Gap", "Status"].map((col) => (
                       <th key={col} className="px-4 py-2.5 text-left text-[10px] uppercase tracking-wide text-gray-500 font-semibold whitespace-nowrap">
                         {col}
                       </th>
@@ -444,7 +477,7 @@ export default function ProjectRoleDemandPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {roleDemand.map(({ role, needed, totalCap, committed, available, gap, effortPct, isSME }) => {
+                  {roleDemand.map(({ role, needed, totalCap, confirmed, tentative, committed, available, gap, effortPct, isSME }) => {
                     const badge = statusBadge(gap);
                     return (
                       <tr key={role} className="hover:bg-slate-50/50 transition-colors">
@@ -469,11 +502,21 @@ export default function ProjectRoleDemandPage() {
                             : <span className="text-[12px] text-gray-500">{fmt(totalCap)} hrs</span>
                           }
                         </td>
+                        {/* Confirmed committed */}
                         <td className="px-4 py-3">
                           {isSME
                             ? <span className="text-[12px] text-gray-400 italic">-</span>
-                            : committed > 0
-                              ? <span className="text-[12px] font-medium text-orange-600">-{fmt(committed)} hrs</span>
+                            : confirmed > 0
+                              ? <span className="text-[12px] font-semibold text-red-600">-{fmt(confirmed)} hrs</span>
+                              : <span className="text-[12px] text-gray-400">None</span>
+                          }
+                        </td>
+                        {/* Tentative committed */}
+                        <td className="px-4 py-3">
+                          {isSME
+                            ? <span className="text-[12px] text-gray-400 italic">-</span>
+                            : tentative > 0
+                              ? <span className="text-[12px] font-medium text-amber-600">-{fmt(tentative)} hrs</span>
                               : <span className="text-[12px] text-gray-400">None</span>
                           }
                         </td>
@@ -493,6 +536,18 @@ export default function ProjectRoleDemandPage() {
             </div>
           )}
 
+          {hasRoles && (
+            <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-2 flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-red-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-500">Confirmed — baseline-approved projects</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-amber-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-500">Tentative — projects still in planning/approval</span>
+              </div>
+            </div>
+          )}
           {hasRoles && (
             <div className="border-t border-gray-100 bg-gray-50 px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
               <div className="flex items-center gap-1.5">
@@ -531,6 +586,8 @@ export default function ProjectRoleDemandPage() {
             roleDemand={roleDemand}
             users={users}
             committedByUser={committedByUser}
+            confirmedByUser={confirmedByUser}
+            tentativeByUser={tentativeByUser}
             planningWeeks={planningWeeks ?? 8}
           />
         )}

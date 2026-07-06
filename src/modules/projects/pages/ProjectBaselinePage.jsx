@@ -380,7 +380,7 @@ export default function ProjectBaselinePage() {
   const { baselineStatus, baselineRejectionComment } = project;
 
   const showOwnerActions =
-    isOwner &&
+    (isOwner || isAdmin) &&
     (baselineStatus === "Not Submitted" || baselineStatus === "Rejected");
   const showApproverActions =
     (isApprover || isAdmin) && baselineStatus === "Pending Approval";
