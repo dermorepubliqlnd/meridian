@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import SeedTestData from "../components/SeedTestData";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
@@ -291,6 +292,11 @@ function WorkCalendarSection() {
             </div>
           </div>
         </div>
+        {/* Dev Tools — for testing only */}
+        <div>
+          <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Developer Tools</h3>
+          <SeedTestData />
+        </div>
       </div>
     </div>
   );
@@ -312,6 +318,11 @@ export default function AdminSettingsPage() {
           <SettingsList docId="deliveryFormats" label="Delivery Formats"      description="Options for Delivery Format in the New Project form." />
           <SettingsList docId="departments"     label="Requestor Departments" description="Department options when logging an intake request." />
           <SettingsList docId="jobTitles"       label="Job Titles"            description="Job title options in User Management." />
+        </div>
+        {/* Dev Tools — for testing only */}
+        <div>
+          <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Developer Tools</h3>
+          <SeedTestData />
         </div>
       </div>
     </div>
