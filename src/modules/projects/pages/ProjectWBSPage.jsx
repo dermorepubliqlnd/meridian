@@ -13,19 +13,14 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { useSettingsList } from "../../../lib/useSettingsList";
 import { useAuth } from "../../../context/AuthContext";
 import { computeRollups } from "../../../lib/completion";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROLE_OPTIONS = [
-  "Project Owner",
-  "Instructional Designer",
-  "Content Developer",
-  "QA Reviewer",
-  "SME",
-  "L&D Supervisor",
-];
+// Role options are built dynamically from Admin Settings jobTitles + fixed extras
+const FIXED_ROLE_EXTRAS = ["SME", "QA Reviewer"];
 
 const PLANNING_STATUS_COLORS = {
   "Draft / Intake": "bg-gray-100 text-gray-600",
@@ -132,7 +127,7 @@ function HoursInput({ value, onSave }) {
 
 // ─── Role select pill ─────────────────────────────────────────────────────────
 
-function RoleSelect({ value, onChange }) {
+function RoleSelect({ value, onChange, roleOptions = [] }) {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
   const ref = useRef(null);
@@ -174,7 +169,7 @@ function RoleSelect({ value, onChange }) {
           >
             None
           </button>
-          {ROLE_OPTIONS.map((r) => (
+          {roleOptions.map((r) => (
             <button
               key={r}
               className={`w-full text-left px-3 py-1.5 hover:bg-teal-50 hover:text-teal-700 ${value === r ? "bg-teal-50 text-teal-700 font-medium" : "text-gray-700"}`}
@@ -205,6 +200,8 @@ function StatCard({ label, value, sub }) {
 
 export default function ProjectWBSPage() {
   const { id } = useParams();
+  const [jobTitles] = useSettingsList("jobTitles", ["Content Developer", "Instructional Designer", "L&D Director", "L&D Supervisor", "Trainer"]);
+  const roleOptions = [...new Set([...jobTitles, ...FIXED_ROLE_EXTRAS])].sort();
   const { user } = useAuth();
 
   const [project, setProject] = useState(undefined); // undefined = loading, null = not found
@@ -723,6 +720,7 @@ export default function ProjectWBSPage() {
                           <RoleSelect
                             value={task.responsibleRole || ""}
                             onChange={(v) => saveTaskField(task.id, { responsibleRole: v })}
+                            roleOptions={roleOptions}
                           />
                         </td>
                         <td className="px-4 py-2.5 text-gray-500 max-w-[180px]">
@@ -774,6 +772,7 @@ export default function ProjectWBSPage() {
                             <RoleSelect
                               value={sub.responsibleRole || ""}
                               onChange={(v) => saveTaskField(sub.id, { responsibleRole: v })}
+                              roleOptions={roleOptions}
                             />
                           </td>
                           <td className="px-4 py-2 text-gray-400 max-w-[180px]">
