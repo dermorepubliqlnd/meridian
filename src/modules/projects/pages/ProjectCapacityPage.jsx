@@ -191,6 +191,7 @@ export default function ProjectCapacityPage() {
   const [planningWeeks, setPlanningWeeks] = useState(null);
   const [toast, setToast] = useState(null);
   const [markingChecked, setMarkingChecked] = useState(false);
+  const [allProjects, setAllProjects] = useState(null);
 
   // Firestore subscriptions
   useEffect(() => {
@@ -222,6 +223,13 @@ export default function ProjectCapacityPage() {
     return unsub;
   }, [id]);
 
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "projects"), (snap) => {
+      setAllProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+
   // ── Derived calculations ──────────────────────────────────────────────────
 
   const topLevelTasks = useMemo(() => {
@@ -240,6 +248,20 @@ export default function ProjectCapacityPage() {
     }
     return map;
   }, [topLevelTasks]);
+
+  // Cross-project ownership counts per user (excludes current project)
+  const ownerCounts = useMemo(() => {
+    if (!allProjects) return {};
+    const active = ["Draft / Intake", "WBS Pending", "Resource Check", "Pending Approval", "Active"];
+    const counts = {};
+    for (const p of allProjects) {
+      if (p.id === id) continue;
+      if (p.ownerId && (active.includes(p.planningStatus) || active.includes(p.status))) {
+        counts[p.ownerId] = (counts[p.ownerId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [allProjects, id]);
 
   // Per-person capacity data
   const personCapacity = useMemo(() => {
@@ -265,9 +287,11 @@ export default function ProjectCapacityPage() {
         hoursNeeded,
         gap,
         status,
+        isProjectOwner: asgn.userId === project?.ownerId,
+        ownerCount: ownerCounts[asgn.userId] || 0,
       };
     });
-  }, [assignments, users, hoursByRole, planningWeeks]);
+  }, [assignments, users, hoursByRole, planningWeeks, project, ownerCounts]);
 
   // Summary stats
   const summaryStats = useMemo(() => {
@@ -769,7 +793,21 @@ export default function ProjectCapacityPage() {
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: "#14B8A6" }}>
                           {(p.name || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)}
                         </div>
-                        <span className="font-medium text-gray-800">{p.name}</span>
+                        <div>
+                          <span className="font-medium text-gray-800">{p.name}</span>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {p.isProjectOwner && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                                👑 Project Owner
+                              </span>
+                            )}
+                            {p.ownerCount > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                ⚠ Owns {p.ownerCount} other active project{p.ownerCount > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     {/* Role */}
