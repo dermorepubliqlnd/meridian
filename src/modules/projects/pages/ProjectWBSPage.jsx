@@ -666,9 +666,7 @@ export default function ProjectWBSPage() {
                             </span>
                             {delta !== null && phTotal > 0 && (
                               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                delta > 2  ? "bg-red-100 text-red-600" :
-                                delta < -2 ? "bg-amber-100 text-amber-600" :
-                                             "bg-emerald-100 text-emerald-600"
+                                delta > 0 ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-600"
                               }`}>
                                 {delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)}h
                               </span>

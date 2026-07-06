@@ -85,11 +85,13 @@ function Toast({ message, onDone }) {
 // ---------------------------------------------------------------------------
 // Person picker dropdown
 // ---------------------------------------------------------------------------
-function PersonPicker({ role, eligibleUsers, currentUserId, onSelect }) {
+function PersonPicker({ allUsers, matchedUsers, currentUserId, onSelect }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
-  const currentUser = eligibleUsers.find((u) => u.id === currentUserId) ?? null;
+  const currentUser = allUsers.find((u) => u.id === currentUserId) ?? null;
+  const matchedIds = new Set((matchedUsers || []).map((u) => u.id));
+  const otherUsers = allUsers.filter((u) => !matchedIds.has(u.id));
 
   useEffect(() => {
     function handler(e) {
@@ -98,6 +100,27 @@ function PersonPicker({ role, eligibleUsers, currentUserId, onSelect }) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  function UserRow({ u }) {
+    return (
+      <button
+        key={u.id}
+        type="button"
+        onClick={() => { onSelect(u.id); setOpen(false); }}
+        className={`w-full text-left flex items-center gap-3 px-4 py-2 text-sm hover:bg-teal-50 transition-colors ${
+          u.id === currentUserId ? "bg-teal-50 font-semibold" : ""
+        }`}
+      >
+        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-500 text-white text-xs font-semibold shrink-0">
+          {getInitials(u.name)}
+        </span>
+        <span className="flex flex-col min-w-0">
+          <span className="truncate text-gray-800">{u.name}</span>
+          <span className="text-[10px] text-gray-400 truncate">{u.jobTitle}</span>
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -120,18 +143,13 @@ function PersonPicker({ role, eligibleUsers, currentUserId, onSelect }) {
         ) : (
           <span className="italic">— Unassigned —</span>
         )}
-        <svg
-          className="ml-auto w-4 h-4 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg className="ml-auto w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {open && (
-        <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
           <button
             type="button"
             className="w-full text-left px-4 py-2 text-sm text-gray-400 hover:bg-gray-50 italic"
@@ -139,27 +157,30 @@ function PersonPicker({ role, eligibleUsers, currentUserId, onSelect }) {
           >
             — Unassigned —
           </button>
-          {eligibleUsers.length === 0 && (
-            <p className="px-4 py-3 text-sm text-gray-400">No eligible users found.</p>
+
+          {/* Role-matched users first */}
+          {matchedUsers && matchedUsers.length > 0 && (
+            <>
+              <div className="px-4 py-1 text-[10px] font-semibold text-teal-600 uppercase tracking-wide bg-teal-50 border-y border-teal-100">
+                Suggested for this role
+              </div>
+              {matchedUsers.map((u) => <UserRow key={u.id} u={u} />)}
+            </>
           )}
-          {eligibleUsers.map((u) => (
-            <button
-              key={u.id}
-              type="button"
-              onClick={() => { onSelect(u.id); setOpen(false); }}
-              className={`w-full text-left flex items-center gap-3 px-4 py-2 text-sm hover:bg-teal-50 transition-colors ${
-                u.id === currentUserId ? "bg-teal-50 font-semibold" : ""
-              }`}
-            >
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-500 text-white text-xs font-semibold shrink-0">
-                {getInitials(u.name)}
-              </span>
-              <span className="flex flex-col min-w-0">
-                <span className="truncate text-gray-800">{u.name}</span>
-                <span className="text-[10px] text-gray-400 truncate">{u.jobTitle}</span>
-              </span>
-            </button>
-          ))}
+
+          {/* All other team members */}
+          {otherUsers.length > 0 && (
+            <>
+              <div className="px-4 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 border-y border-gray-100">
+                All team members
+              </div>
+              {otherUsers.map((u) => <UserRow key={u.id} u={u} />)}
+            </>
+          )}
+
+          {allUsers.length === 0 && (
+            <p className="px-4 py-3 text-sm text-gray-400">No users found.</p>
+          )}
         </div>
       )}
     </div>
@@ -172,7 +193,7 @@ function PersonPicker({ role, eligibleUsers, currentUserId, onSelect }) {
 function AssignmentRow({
   role,
   hoursNeeded,
-  eligibleUsers,
+  matchedUsers,
   allUsers,
   assignment,
   planningWeeks,
@@ -267,8 +288,8 @@ function AssignmentRow({
           />
         ) : (
           <PersonPicker
-            role={role}
-            eligibleUsers={eligibleUsers}
+            allUsers={allUsers}
+            matchedUsers={matchedUsers}
             currentUserId={assignment?.userId ?? null}
             onSelect={handleSelectUser}
           />
@@ -640,7 +661,7 @@ export default function ProjectResourceAssignmentPage() {
                         key={role}
                         role={role}
                         hoursNeeded={hoursNeeded}
-                        eligibleUsers={eligibleUsers}
+                        matchedUsers={eligibleUsers}
                         allUsers={users}
                         assignment={assignment}
                         planningWeeks={planningWeeks}
