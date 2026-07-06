@@ -22,7 +22,6 @@ const ROLE_MATCHERS = {
   "project owner":          (jt) => /director|supervisor|project owner|project lead/i.test(jt),
   "instructional designer": (jt) => /instructional designer/i.test(jt),
   "content developer":      (jt) => /content developer/i.test(jt),
-  "qa reviewer":            (jt) => /qa reviewer|quality/i.test(jt),
   "sme":                    (_jt) => false,
   "l&d supervisor":         (jt) => /l&d supervisor|supervisor/i.test(jt),
   "trainer":                (jt) => /\btrainer\b/i.test(jt),

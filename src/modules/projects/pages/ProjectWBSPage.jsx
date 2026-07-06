@@ -20,7 +20,7 @@ import { computeRollups } from "../../../lib/completion";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // Role options are built dynamically from Admin Settings jobTitles + fixed extras
-const FIXED_ROLE_EXTRAS = ["SME", "QA Reviewer"];
+const FIXED_ROLE_EXTRAS = ["SME"];
 
 const PLANNING_STATUS_COLORS = {
   "Draft / Intake": "bg-gray-100 text-gray-600",

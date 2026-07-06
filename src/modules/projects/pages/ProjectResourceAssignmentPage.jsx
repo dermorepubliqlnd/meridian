@@ -24,7 +24,6 @@ const ROLE_MATCHERS = {
     jt.trim().toLowerCase() === "instructional designer",
   "Content Developer": (jt) =>
     jt.trim().toLowerCase() === "content developer",
-  "QA Reviewer": (jt) => /qa reviewer|quality/i.test(jt),
   SME: (jt) => jt.trim().toLowerCase() === "sme",
   "L&D Supervisor": (jt) => jt.trim().toLowerCase() === "l&d supervisor",
 };

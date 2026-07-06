@@ -43,13 +43,13 @@ function buildSeed(users) {
         { phase: "Research & Analysis",  role: "Instructional Designer", hours: 8,  order: 0 },
         { phase: "Learning Design",      role: "Instructional Designer", hours: 16, order: 1 },
         { phase: "Content Production",   role: "Content Developer",      hours: 20, order: 2 },
-        { phase: "QA Review",            role: "QA Reviewer",            hours: 8,  order: 3 },
+        { phase: "QA Review",            role: "L&D Supervisor",          hours: 8,  order: 3 },
         { phase: "SME Validation",       role: "SME",                    hours: 10, order: 4 },
       ],
       assignments: [
         { role: "Instructional Designer", userId: ID1?.id, allocationPct: 100 },
         { role: "Content Developer",      userId: CD1?.id, allocationPct: 100 },
-        { role: "QA Reviewer",            userId: SUP?.id, allocationPct: 50  },
+        { role: "L&D Supervisor",         userId: SUP?.id, allocationPct: 50  },
       ],
     },
     {
@@ -69,7 +69,7 @@ function buildSeed(users) {
         { phase: "Curriculum Design",    role: "Instructional Designer", hours: 20, order: 1 },
         { phase: "Content Production",   role: "Content Developer",      hours: 24, order: 2 },
         { phase: "Facilitation Design",  role: "L&D Supervisor",         hours: 12, order: 3 },
-        { phase: "Pilot & QA",           role: "QA Reviewer",            hours: 10, order: 4 },
+        { phase: "Pilot & QA",           role: "L&D Supervisor",          hours: 10, order: 4 },
         { phase: "SME Coordination",     role: "SME",                    hours: 8,  order: 5 },
       ],
       assignments: [
@@ -95,7 +95,7 @@ function buildSeed(users) {
         { phase: "Learning Design",     role: "Instructional Designer", hours: 12, order: 1 },
         { phase: "Content Production",  role: "Content Developer",      hours: 16, order: 2 },
         { phase: "Facilitation",        role: "Trainer",                hours: 10, order: 3 },
-        { phase: "QA Review",           role: "QA Reviewer",            hours: 6,  order: 4 },
+        { phase: "QA Review",           role: "L&D Supervisor",          hours: 6,  order: 4 },
       ],
       assignments: [
         { role: "Instructional Designer", userId: ID1?.id, allocationPct: 80 },
