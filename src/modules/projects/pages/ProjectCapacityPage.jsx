@@ -267,7 +267,7 @@ export default function ProjectCapacityPage() {
   const personCapacity = useMemo(() => {
     if (!assignments || !users) return [];
 
-    return assignments.map((asgn) => {
+    return assignments.filter((asgn) => asgn.userId).map((asgn) => {
       const user = users.find((u) => u.id === asgn.userId) || {};
       const availableHrs = userWeeklyProjectHours(user) * planningWeeks;
       const roleHours = hoursByRole[asgn.role] || 0;
