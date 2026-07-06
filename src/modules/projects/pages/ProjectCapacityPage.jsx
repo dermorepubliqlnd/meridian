@@ -196,7 +196,13 @@ export default function ProjectCapacityPage() {
   // Firestore subscriptions
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "projects", id), (snap) => {
-      setProject(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      if (snap.exists()) {
+        const data = snap.data();
+        setProject({ id: snap.id, ...data });
+        setPlanningWeeks((prev) => prev ?? (data.planningWeeks || projectDurationWeeks({ ...data })));
+      } else {
+        setProject(null);
+      }
     });
     return unsub;
   }, [id]);
@@ -218,7 +224,21 @@ export default function ProjectCapacityPage() {
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "projects", id, "assignments"), (snap) => {
-      setAssignments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // Flatten assignees array into individual records for capacity calc
+      const flat = [];
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const role = data.role || d.id;
+        if (data.assignees?.length) {
+          data.assignees.forEach((slot) => {
+            if (slot.userId) flat.push({ id: `${d.id}-${slot.slotId}`, role, userId: slot.userId, allocationPct: slot.allocationPct ?? 100 });
+          });
+        } else if (data.userId) {
+          // Legacy single-assignee format
+          flat.push({ id: d.id, role, userId: data.userId, allocationPct: data.allocationPct ?? 100 });
+        }
+      });
+      setAssignments(flat);
     });
     return unsub;
   }, [id]);
@@ -467,8 +487,12 @@ export default function ProjectCapacityPage() {
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-600 whitespace-nowrap">Planning window:</label>
               <select
-                value={planningWeeks}
-                onChange={(e) => setPlanningWeeks(Number(e.target.value))}
+                value={planningWeeks ?? ""}
+                onChange={async (e) => {
+                  const val = Number(e.target.value);
+                  setPlanningWeeks(val);
+                  await updateDoc(doc(db, "projects", id), { planningWeeks: val });
+                }}
                 className="border border-gray-300 rounded-lg text-sm px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-400"
               >
                 {PLANNING_WINDOW_OPTIONS.map((w) => (

@@ -18,7 +18,7 @@ import { userWeeklyProjectHours } from "../../../lib/bandwidth";
 // Role → jobTitle matching (duplicated here; not exported from RoleDemandPage)
 // ---------------------------------------------------------------------------
 const ROLE_MATCHERS = {
-  "Project Owner": (jt) => /director|supervisor|project owner/i.test(jt),
+  "Project Lead": (jt) => /director|supervisor|project owner|project lead/i.test(jt),
   "Instructional Designer": (jt) =>
     jt.trim().toLowerCase() === "instructional designer",
   "Content Developer": (jt) =>
@@ -29,10 +29,13 @@ const ROLE_MATCHERS = {
 };
 
 function matchUsersToRole(users, role) {
+  if (role === "SME") return []; // SME is always external
   const matcher =
     ROLE_MATCHERS[role] ??
     ((jt) => jt.trim().toLowerCase() === role.trim().toLowerCase());
-  return users.filter((u) => matcher(u.jobTitle ?? ""));
+  const matched = users.filter((u) => matcher(u.jobTitle ?? ""));
+  // If no title match, fall back to all internal users
+  return matched.length > 0 ? matched : users;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,35 +172,21 @@ function PersonPicker({ allUsers, matchedUsers, currentUserId, onSelect }) {
 }
 
 // ---------------------------------------------------------------------------
-// Assignment row
+// Single slot row (one person within a role)
 // ---------------------------------------------------------------------------
-function AssignmentRow({
-  role,
-  hoursNeeded,
-  matchedUsers,
-  allUsers,
-  assignment,
-  planningWeeks,
-  onSave,
-}) {
-  const [allocationPct, setAllocationPct] = useState(
-    assignment?.allocationPct ?? 100
-  );
-  const [notes, setNotes] = useState(assignment?.notes ?? "");
-  const [smeName, setSmeName] = useState(assignment?.smeName ?? "");
+function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeeks, onUpdateSlot, onRemoveSlot, canRemove }) {
+  const [allocationPct, setAllocationPct] = useState(slot.allocationPct ?? 100);
+  const [notes, setNotes] = useState(slot.notes ?? "");
 
   useEffect(() => {
-    setAllocationPct(assignment?.allocationPct ?? 100);
-    setNotes(assignment?.notes ?? "");
-    setSmeName(assignment?.smeName ?? "");
-  }, [assignment?.allocationPct, assignment?.notes, assignment?.smeName]);
-
-  const isSME = role === "SME";
+    setAllocationPct(slot.allocationPct ?? 100);
+    setNotes(slot.notes ?? "");
+  }, [slot.allocationPct, slot.notes]);
 
   const assignedUser = useMemo(() => {
-    if (!assignment?.userId) return null;
-    return allUsers.find((u) => u.id === assignment.userId) ?? null;
-  }, [allUsers, assignment?.userId]);
+    if (!slot.userId) return null;
+    return allUsers.find((u) => u.id === slot.userId) ?? null;
+  }, [allUsers, slot.userId]);
 
   const allocatedHrs = hoursNeeded * (allocationPct / 100);
 
@@ -208,131 +197,168 @@ function AssignmentRow({
     return { available, remaining, ...getAvailabilityLabel(remaining) };
   }, [assignedUser, planningWeeks, allocatedHrs]);
 
-  function handleSelectUser(userId) {
-    onSave(role, { userId, allocationPct, notes, smeName });
-  }
-
-  function handleAllocationBlur() {
+  function commitAllocation() {
     const pct = Math.min(100, Math.max(0, Number(allocationPct) || 0));
     setAllocationPct(pct);
-    onSave(role, {
-      userId: assignment?.userId ?? null,
-      allocationPct: pct,
-      notes,
-      smeName,
-    });
+    onUpdateSlot(slot.slotId, { userId: slot.userId, allocationPct: pct, notes });
   }
 
-  function handleNotesBlur() {
-    onSave(role, {
-      userId: assignment?.userId ?? null,
-      allocationPct,
-      notes,
-      smeName,
-    });
+  function commitNotes() {
+    onUpdateSlot(slot.slotId, { userId: slot.userId, allocationPct, notes });
   }
-
-  function handleSmeBlur() {
-    onSave(role, {
-      userId: assignment?.userId ?? null,
-      allocationPct,
-      notes,
-      smeName,
-    });
-  }
-
-  const isOverallocated = availabilityInfo && availabilityInfo.remaining < 0;
 
   return (
-    <tr className="hover:bg-gray-50 transition-colors">
-      {/* Required Role */}
-      <td className="px-4 py-4 align-top">
-        <p className="font-semibold text-gray-800 text-sm">{role}</p>
-        <p className="text-[11px] text-gray-400 mt-0.5">{hoursNeeded}h total</p>
-      </td>
-
-      {/* Hours Needed */}
-      <td className="px-4 py-4 align-top text-sm text-gray-700 font-medium">
-        {hoursNeeded}h
-      </td>
-
-      {/* Assigned To */}
-      <td className="px-4 py-4 align-top">
-        {isSME ? (
-          <input
-            type="text"
-            value={smeName}
-            onChange={(e) => setSmeName(e.target.value)}
-            onBlur={handleSmeBlur}
-            placeholder="Enter SME name…"
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        ) : (
-          <PersonPicker
-            allUsers={allUsers}
-            matchedUsers={matchedUsers}
-            currentUserId={assignment?.userId ?? null}
-            onSelect={handleSelectUser}
-          />
-        )}
+    <tr className="hover:bg-gray-50/60 transition-colors border-t border-gray-100 first:border-t-0">
+      {/* Person picker */}
+      <td className="px-4 py-3 align-middle pl-8">
+        <PersonPicker
+          allUsers={allUsers}
+          matchedUsers={matchedUsers}
+          currentUserId={slot.userId ?? null}
+          onSelect={(userId) => onUpdateSlot(slot.slotId, { userId, allocationPct, notes })}
+        />
       </td>
 
       {/* Allocation % */}
-      <td className="px-4 py-4 align-top">
+      <td className="px-4 py-3 align-middle">
         <div className="flex items-center gap-1">
           <input
-            type="number"
-            min={0}
-            max={100}
+            type="number" min={0} max={100}
             value={allocationPct}
             onChange={(e) => setAllocationPct(e.target.value)}
-            onBlur={handleAllocationBlur}
-            className="w-16 border border-gray-200 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-400"
+            onBlur={commitAllocation}
+            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
           <span className="text-sm text-gray-500">%</span>
         </div>
-        <p className="text-[11px] text-gray-400 mt-1">
-          = {allocatedHrs.toFixed(1)}h of {hoursNeeded}h needed
-        </p>
+        <p className="text-[10px] text-gray-400 mt-0.5">= {allocatedHrs.toFixed(1)}h</p>
       </td>
 
       {/* Availability */}
-      <td className="px-4 py-4 align-top">
+      <td className="px-4 py-3 align-middle">
         {availabilityInfo ? (
           <div className="space-y-1">
-            <p className="text-[11px] text-gray-500">
-              {availabilityInfo.available.toFixed(1)}h available
-            </p>
-            <span
-              className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${availabilityInfo.cls}`}
-            >
+            <p className="text-[11px] text-gray-500">{availabilityInfo.available.toFixed(1)}h pool</p>
+            <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${availabilityInfo.cls}`}>
               {availabilityInfo.label}
             </span>
           </div>
-        ) : (
-          <span className="text-gray-300 text-sm">—</span>
-        )}
+        ) : <span className="text-gray-300 text-sm">—</span>}
       </td>
 
-      {/* Notes / Status */}
-      <td className="px-4 py-4 align-top">
-        <div className="flex items-start gap-1">
+      {/* Notes */}
+      <td className="px-4 py-3 align-middle">
+        <div className="flex items-center gap-1">
           <input
-            type="text"
-            value={notes}
+            type="text" value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            onBlur={handleNotesBlur}
+            onBlur={commitNotes}
             placeholder="Notes…"
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400"
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
-          {isOverallocated && (
-            <span title="Overallocated" className="text-yellow-500 text-base mt-2 shrink-0">
-              ⚠
-            </span>
+          {availabilityInfo?.remaining < 0 && (
+            <span title="Overallocated" className="text-amber-500 text-base shrink-0">⚠</span>
           )}
         </div>
       </td>
+
+      {/* Remove slot */}
+      <td className="px-2 py-3 align-middle">
+        {canRemove && (
+          <button
+            type="button"
+            onClick={() => onRemoveSlot(slot.slotId)}
+            className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none"
+            title="Remove this person"
+          >×</button>
+        )}
+      </td>
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Assignment row — groups all slots for one role
+// ---------------------------------------------------------------------------
+function AssignmentRow({ role, hoursNeeded, matchedUsers, allUsers, assignment, planningWeeks, onUpdateSlot, onAddSlot, onRemoveSlot, onUpdateSme }) {
+  const [smeName, setSmeName] = useState(assignment?.smeName ?? "");
+  const isSME = role === "SME";
+  const slots = assignment?.assignees ?? [];
+
+  useEffect(() => { setSmeName(assignment?.smeName ?? ""); }, [assignment?.smeName]);
+
+  const assignedCount = isSME ? (smeName ? 1 : 0) : slots.filter((s) => s.userId).length;
+
+  return (
+    <>
+      {/* Role header row */}
+      <tr className="bg-gray-50/80">
+        <td className="px-4 py-3 align-middle" colSpan={2}>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-800 text-sm">{role}</span>
+            {isSME && <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full font-medium">External</span>}
+            <span className="text-[11px] text-gray-400">{hoursNeeded}h total</span>
+            {assignedCount > 0 && !isSME && (
+              <span className="text-[10px] bg-teal-50 text-teal-600 border border-teal-200 px-1.5 py-0.5 rounded-full font-medium">
+                {assignedCount} assigned
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-3 align-middle" colSpan={3}>
+          {!isSME && (
+            <button
+              type="button"
+              onClick={() => onAddSlot(role)}
+              className="text-[11px] text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 transition-colors"
+            >
+              <span className="text-base leading-none">+</span> Add person
+            </button>
+          )}
+        </td>
+      </tr>
+
+      {/* SME text input */}
+      {isSME && (
+        <tr className="hover:bg-gray-50/60 transition-colors">
+          <td className="px-4 py-3 pl-8 align-middle" colSpan={4}>
+            <input
+              type="text" value={smeName}
+              onChange={(e) => setSmeName(e.target.value)}
+              onBlur={() => onUpdateSme(role, smeName)}
+              placeholder="Enter SME name…"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </td>
+          <td />
+        </tr>
+      )}
+
+      {/* Assignee slots */}
+      {!isSME && slots.map((slot) => (
+        <SlotRow
+          key={slot.slotId}
+          role={role}
+          hoursNeeded={hoursNeeded}
+          slot={slot}
+          matchedUsers={matchedUsers}
+          allUsers={allUsers}
+          planningWeeks={planningWeeks}
+          onUpdateSlot={(slotId, data) => onUpdateSlot(role, slotId, data)}
+          onRemoveSlot={(slotId) => onRemoveSlot(role, slotId)}
+          canRemove={slots.length > 1}
+        />
+      ))}
+
+      {/* Empty state if no slots yet */}
+      {!isSME && slots.length === 0 && (
+        <tr>
+          <td colSpan={5} className="px-4 py-3 pl-8">
+            <span className="text-sm text-gray-400 italic">No one assigned yet — click "Add person" above.</span>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -385,9 +411,19 @@ export default function ProjectResourceAssignmentPage() {
     const unsub = onSnapshot(
       collection(db, "projects", id, "assignments"),
       (snap) => {
+        // Each doc: { role, assignees:[{slotId,userId,allocationPct,notes}], smeName }
+        // Legacy docs: { role, userId, allocationPct, notes, smeName } — migrate on read
         const map = {};
         snap.docs.forEach((d) => {
-          map[d.id] = { id: d.id, ...d.data() };
+          const data = d.data();
+          let assignees = data.assignees;
+          if (!assignees) {
+            // Migrate legacy single-assignee format
+            assignees = data.userId
+              ? [{ slotId: "slot-0", userId: data.userId, allocationPct: data.allocationPct ?? 100, notes: data.notes ?? "" }]
+              : [];
+          }
+          map[d.id] = { id: d.id, role: data.role || d.id, assignees, smeName: data.smeName ?? "" };
         });
         setAssignments(map);
       }
@@ -414,36 +450,60 @@ export default function ProjectResourceAssignmentPage() {
     }));
   }, [tasks]);
 
-  // ---- Save handler ----
-  async function saveAssignment(role, data) {
+  // ---- Save handlers ----
+  async function updateSlot(role, slotId, slotData) {
     const docId = roleDocId(role);
-    const payload = {
-      role,
-      userId: data.userId ?? null,
-      allocationPct: data.allocationPct ?? 100,
-      notes: data.notes ?? "",
-      smeName: data.smeName ?? "",
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, "projects", id, "assignments", docId), payload, {
-      merge: true,
-    });
+    const existing = assignments?.[docId] ?? { role, assignees: [], smeName: "" };
+    const assignees = existing.assignees.map((s) =>
+      s.slotId === slotId ? { ...s, ...slotData } : s
+    );
+    await setDoc(doc(db, "projects", id, "assignments", docId),
+      { role, assignees, smeName: existing.smeName, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+    await checkAllAssigned({ ...assignments, [docId]: { ...existing, assignees } });
+  }
 
-    // Check if all roles are now assigned
-    const updatedAssignments = {
-      ...(assignments ?? {}),
-      [docId]: payload,
-    };
+  async function addSlot(role) {
+    const docId = roleDocId(role);
+    const existing = assignments?.[docId] ?? { role, assignees: [], smeName: "" };
+    const newSlot = { slotId: `slot-${Date.now()}`, userId: null, allocationPct: 100, notes: "" };
+    const assignees = [...existing.assignees, newSlot];
+    await setDoc(doc(db, "projects", id, "assignments", docId),
+      { role, assignees, smeName: existing.smeName, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  async function removeSlot(role, slotId) {
+    const docId = roleDocId(role);
+    const existing = assignments?.[docId] ?? { role, assignees: [], smeName: "" };
+    const assignees = existing.assignees.filter((s) => s.slotId !== slotId);
+    await setDoc(doc(db, "projects", id, "assignments", docId),
+      { role, assignees, smeName: existing.smeName, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+    await checkAllAssigned({ ...assignments, [docId]: { ...existing, assignees } });
+  }
+
+  async function updateSme(role, smeName) {
+    const docId = roleDocId(role);
+    const existing = assignments?.[docId] ?? { role, assignees: [], smeName: "" };
+    await setDoc(doc(db, "projects", id, "assignments", docId),
+      { role, assignees: existing.assignees, smeName, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+    await checkAllAssigned(assignments);
+  }
+
+  async function checkAllAssigned(currentAssignments) {
     const allAssigned = roleDemand.every((rd) => {
-      const a = updatedAssignments[roleDocId(rd.role)];
-      return a && (a.userId || (rd.role === "SME" && a.smeName));
+      const a = currentAssignments?.[roleDocId(rd.role)];
+      if (!a) return false;
+      if (rd.role === "SME") return !!a.smeName;
+      return a.assignees?.some((s) => s.userId);
     });
-
-    if (
-      allAssigned &&
-      roleDemand.length > 0 &&
-      project?.planningStatus === "WBS Pending"
-    ) {
+    if (allAssigned && roleDemand.length > 0 && project?.planningStatus === "WBS Pending") {
       await updateDoc(doc(db, "projects", id), {
         planningStatus: "Resource Check",
         updatedAt: serverTimestamp(),
@@ -462,27 +522,25 @@ export default function ProjectResourceAssignmentPage() {
     let anyAssigned = false;
 
     for (const { role, hoursNeeded } of roleDemand) {
+      if (role === "SME") continue;
       const docId = roleDocId(role);
       const existing = assignments?.[docId];
-      if (existing?.userId) continue;
+      // Skip if already has at least one assigned slot
+      if (existing?.assignees?.some((s) => s.userId)) continue;
 
-      const eligible = matchUsersToRole(users, role);
+      const eligible = matchUsersToRole(
+        users.filter((u) => u.id !== project?.approverId),
+        role
+      );
       if (eligible.length === 0) continue;
 
       const best = eligible.reduce((prev, curr) => {
-        const prevCap =
-          userWeeklyProjectHours(prev) * planningWeeks - hoursNeeded;
-        const currCap =
-          userWeeklyProjectHours(curr) * planningWeeks - hoursNeeded;
+        const prevCap = userWeeklyProjectHours(prev) * planningWeeks - hoursNeeded;
+        const currCap = userWeeklyProjectHours(curr) * planningWeeks - hoursNeeded;
         return currCap > prevCap ? curr : prev;
       });
 
-      await saveAssignment(role, {
-        userId: best.id,
-        allocationPct: 100,
-        notes: existing?.notes ?? "",
-        smeName: existing?.smeName ?? "",
-      });
+      await updateSlot(role, "slot-0", { userId: best.id, allocationPct: 100, notes: "" });
       anyAssigned = true;
     }
 
@@ -623,15 +681,14 @@ export default function ProjectResourceAssignmentPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     {[
-                      "Required Role",
-                      "Hours Needed",
-                      "Assigned To",
+                      "Role / Assigned To",
                       "Allocation %",
-                      `Availability (Next ${planningWeeks} Weeks)`,
+                      `Availability (Next ${planningWeeks} Wks)`,
                       "Notes / Status",
-                    ].map((col) => (
+                      "",
+                    ].map((col, i) => (
                       <th
-                        key={col}
+                        key={i}
                         className="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-gray-500 font-semibold whitespace-nowrap"
                       >
                         {col}
@@ -642,10 +699,15 @@ export default function ProjectResourceAssignmentPage() {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {roleDemand.map(({ role, hoursNeeded }) => {
                     const docId = roleDocId(role);
-                    const assignment = assignments[docId] ?? null;
-                    // All project team members can be assigned to any role
-                    const eligibleUsers = matchUsersToRole(users, role);
-
+                    let assignment = assignments?.[docId] ?? null;
+                    // Auto-init with one empty slot for non-SME roles
+                    if (!assignment && role !== "SME") {
+                      assignment = { role, assignees: [{ slotId: "slot-0", userId: null, allocationPct: 100, notes: "" }], smeName: "" };
+                    }
+                    const eligibleUsers = matchUsersToRole(
+                      users.filter((u) => u.id !== project?.approverId),
+                      role
+                    );
                     return (
                       <AssignmentRow
                         key={role}
@@ -655,7 +717,10 @@ export default function ProjectResourceAssignmentPage() {
                         allUsers={users}
                         assignment={assignment}
                         planningWeeks={planningWeeks}
-                        onSave={saveAssignment}
+                        onUpdateSlot={updateSlot}
+                        onAddSlot={addSlot}
+                        onRemoveSlot={removeSlot}
+                        onUpdateSme={updateSme}
                       />
                     );
                   })}
@@ -675,8 +740,9 @@ export default function ProjectResourceAssignmentPage() {
               <p className="text-2xl font-bold text-[#0F2240] mt-1">
                 {
                   roleDemand.filter((rd) => {
-                    const a = assignments[roleDocId(rd.role)];
-                    return a?.userId || (rd.role === "SME" && a?.smeName);
+                    const a = assignments?.[roleDocId(rd.role)];
+                    if (rd.role === "SME") return !!a?.smeName;
+                    return a?.assignees?.some((s) => s.userId);
                   }).length
                 }
                 <span className="text-base font-normal text-gray-400">
