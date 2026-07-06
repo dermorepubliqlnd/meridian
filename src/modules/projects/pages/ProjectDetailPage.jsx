@@ -1088,6 +1088,73 @@ export default function ProjectDetailPage() {
         </Link>
       </div>
 
+      {/* ── Deadline Flexibility Health Banner ── */}
+      {(health?.label === "At Risk" || health?.label === "Behind Schedule") && (() => {
+        const flex = project.deadlineFlexibility || "Flexible";
+        const isBehind = health.label === "Behind Schedule";
+
+        const config = {
+          Fixed: {
+            bg:   "bg-red-50 border-red-300",
+            icon: "text-red-500",
+            head: "text-red-800",
+            body: "text-red-700",
+            badge: "bg-red-100 text-red-700 border border-red-200",
+            title: isBehind
+              ? "⚠️ Fixed deadline — schedule has slipped"
+              : "⚠️ Fixed deadline — at risk",
+            msg: isBehind
+              ? "This project has a fixed, non-negotiable deadline and is currently behind schedule. Escalate immediately and consider submitting a formal deadline change request or descoping."
+              : "This project is at risk and has a fixed deadline with no room to move. Immediate corrective action is needed to protect the committed date.",
+          },
+          Flexible: {
+            bg:   "bg-amber-50 border-amber-300",
+            icon: "text-amber-500",
+            head: "text-amber-800",
+            body: "text-amber-700",
+            badge: "bg-amber-100 text-amber-700 border border-amber-200",
+            title: isBehind
+              ? "Schedule has slipped — flexible deadline"
+              : "Deadline at risk — flexible",
+            msg: isBehind
+              ? "This project is behind schedule. The deadline has some flexibility, but stakeholders should be informed and a revised timeline agreed on soon."
+              : "This project is at risk. While the deadline has some flexibility, review the remaining effort and assess whether the target date still holds.",
+          },
+          Negotiable: {
+            bg:   "bg-amber-50 border-amber-200",
+            icon: "text-amber-400",
+            head: "text-amber-700",
+            body: "text-amber-600",
+            badge: "bg-amber-50 text-amber-600 border border-amber-200",
+            title: isBehind
+              ? "Schedule has slipped — open to negotiation"
+              : "Deadline at risk — negotiable",
+            msg: isBehind
+              ? "This project is behind schedule. The deadline is negotiable — consider initiating a conversation with stakeholders on a revised target before it becomes critical."
+              : "This project is at risk. The deadline is open to negotiation — consider a proactive discussion with stakeholders before the situation escalates.",
+          },
+        };
+        const c = config[flex] || config.Flexible;
+        return (
+          <div className={"border rounded-lg px-5 py-3.5 mb-4 " + c.bg}>
+            <div className="flex items-start gap-3">
+              <svg className={"w-4 h-4 mt-0.5 flex-shrink-0 " + c.icon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <span className={"text-[12px] font-semibold " + c.head}>{c.title}</span>
+                  <span className={"text-[10px] font-semibold px-1.5 py-0.5 rounded " + c.badge}>
+                    {flex} Deadline
+                  </span>
+                </div>
+                <p className={"text-[12px] " + c.body}>{c.msg}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Baseline deadline ── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5 mb-4">
         <div className="flex items-center justify-between">
