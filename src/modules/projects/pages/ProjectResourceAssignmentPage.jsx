@@ -19,6 +19,7 @@ import { userWeeklyProjectHours } from "../../../lib/bandwidth";
 // ---------------------------------------------------------------------------
 const ROLE_MATCHERS = {
   "Project Lead": (jt) => /director|supervisor|project owner|project lead/i.test(jt),
+  "Project Owner": (jt) => /director|supervisor|project owner|project lead/i.test(jt),
   "Instructional Designer": (jt) =>
     jt.trim().toLowerCase() === "instructional designer",
   "Content Developer": (jt) =>
@@ -30,12 +31,14 @@ const ROLE_MATCHERS = {
 
 function matchUsersToRole(users, role) {
   if (role === "SME") return []; // SME is always external
+  const hasDefinedMatcher = role in ROLE_MATCHERS;
   const matcher =
     ROLE_MATCHERS[role] ??
     ((jt) => jt.trim().toLowerCase() === role.trim().toLowerCase());
   const matched = users.filter((u) => matcher(u.jobTitle ?? ""));
-  // If no title match, fall back to all internal users
-  return matched.length > 0 ? matched : users;
+  // Only fall back to all users if the role has NO defined matcher
+  // (i.e. it's a custom/unknown role). Known roles show only matched titles.
+  return matched.length > 0 ? matched : (hasDefinedMatcher ? [] : users);
 }
 
 // ---------------------------------------------------------------------------

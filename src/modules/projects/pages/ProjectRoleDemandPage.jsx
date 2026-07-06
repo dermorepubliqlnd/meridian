@@ -17,6 +17,8 @@ import { userWeeklyProjectHours } from "../../../lib/bandwidth";
 const ROLE_MATCHERS = {
   "Project Lead": (jt) =>
     /director|supervisor|project owner|project lead/i.test(jt),
+  "Project Owner": (jt) =>
+    /director|supervisor|project owner|project lead/i.test(jt),
   "Instructional Designer": (jt) =>
     jt.trim().toLowerCase() === "instructional designer",
   "Content Developer": (jt) =>
@@ -32,11 +34,12 @@ const ROLE_MATCHERS = {
 /** Returns users whose jobTitle matches the given role. */
 function matchUsersToRole(users, role) {
   if (role === "SME") return [];
+  const hasDefinedMatcher = role in ROLE_MATCHERS;
   const matcher =
     ROLE_MATCHERS[role] ??
     ((jt) => jt.trim().toLowerCase() === role.trim().toLowerCase());
   const matched = users.filter((u) => matcher(u.jobTitle ?? ""));
-  return matched.length > 0 ? matched : users;
+  return matched.length > 0 ? matched : (hasDefinedMatcher ? [] : users);
 }
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
