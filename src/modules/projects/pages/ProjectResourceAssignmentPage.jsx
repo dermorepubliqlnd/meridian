@@ -91,7 +91,6 @@ function PersonPicker({ allUsers, matchedUsers, currentUserId, onSelect }) {
 
   const currentUser = allUsers.find((u) => u.id === currentUserId) ?? null;
   const matchedIds = new Set((matchedUsers || []).map((u) => u.id));
-  const otherUsers = allUsers.filter((u) => !matchedIds.has(u.id));
 
   useEffect(() => {
     function handler(e) {
@@ -158,28 +157,10 @@ function PersonPicker({ allUsers, matchedUsers, currentUserId, onSelect }) {
             — Unassigned —
           </button>
 
-          {/* Role-matched users first */}
-          {matchedUsers && matchedUsers.length > 0 && (
-            <>
-              <div className="px-4 py-1 text-[10px] font-semibold text-teal-600 uppercase tracking-wide bg-teal-50 border-y border-teal-100">
-                Suggested for this role
-              </div>
-              {matchedUsers.map((u) => <UserRow key={u.id} u={u} />)}
-            </>
-          )}
-
-          {/* All other team members */}
-          {otherUsers.length > 0 && (
-            <>
-              <div className="px-4 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 border-y border-gray-100">
-                All team members
-              </div>
-              {otherUsers.map((u) => <UserRow key={u.id} u={u} />)}
-            </>
-          )}
-
-          {allUsers.length === 0 && (
-            <p className="px-4 py-3 text-sm text-gray-400">No users found.</p>
+          {(matchedUsers && matchedUsers.length > 0) ? (
+            matchedUsers.map((u) => <UserRow key={u.id} u={u} />)
+          ) : (
+            <p className="px-4 py-3 text-sm text-gray-400 italic">No matching users found for this role.</p>
           )}
         </div>
       )}
