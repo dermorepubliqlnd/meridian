@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
   collection,
@@ -323,7 +324,10 @@ export default function ProjectRoleDemandPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="px-6 py-5 max-w-6xl mx-auto space-y-5">
+    <div className="min-h-screen bg-gray-50">
+      <PlanningFlowNav project={project} projectId={id} />
+
+      <div className="px-6 py-5 max-w-6xl mx-auto space-y-5">
 
       {/* Toast */}
       {toastMsg && (
@@ -335,13 +339,6 @@ export default function ProjectRoleDemandPage() {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div>
-        <Link
-          to={`/projects/${id}`}
-          className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-[#0F2240] transition-colors mb-3"
-        >
-          ← Back to Project
-        </Link>
-
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -609,5 +606,6 @@ export default function ProjectRoleDemandPage() {
         <TeamMembersSection roleDemand={roleDemand} users={users} />
       )}
     </div>
+      </div>
   );
 }

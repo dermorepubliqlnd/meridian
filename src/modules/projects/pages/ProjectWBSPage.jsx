@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
+import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
   collection,
@@ -279,15 +280,22 @@ export default function ProjectWBSPage() {
   const checkPlanningStatus = useCallback(
     async (currentProject, currentTopLevel) => {
       if (!currentProject) return;
-      const allFilled = currentTopLevel.every(
-        (t) => t.estimatedHours > 0 && t.responsibleRole
-      );
-      if (allFilled && currentTopLevel.length > 0 && currentProject.planningStatus === "Draft / Intake") {
+      const allFilled =
+        currentTopLevel.length > 0 &&
+        currentTopLevel.every((t) => t.estimatedHours > 0 && t.responsibleRole);
+      if (allFilled && currentProject.planningStatus === "Draft / Intake") {
         try {
           await updateDoc(doc(db, "projects", id), { planningStatus: "WBS Pending" });
           showToast("WBS complete — ready for resource check.");
         } catch (e) {
           console.error("planningStatus update failed", e);
+        }
+      } else if (!allFilled && currentProject.planningStatus === "WBS Pending") {
+        // Regression: hours or role removed — roll back to Draft / Intake
+        try {
+          await updateDoc(doc(db, "projects", id), { planningStatus: "Draft / Intake" });
+        } catch (e) {
+          console.error("planningStatus regression failed", e);
         }
       }
     },
@@ -440,18 +448,8 @@ export default function ProjectWBSPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <PlanningFlowNav project={project} projectId={id} />
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-
-        {/* Back link */}
-        <Link
-          to={`/projects/${id}`}
-          className="inline-flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-teal-600 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Project
-        </Link>
 
         {/* Header card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5">

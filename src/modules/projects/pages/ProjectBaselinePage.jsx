@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
   collection,
@@ -245,6 +246,14 @@ export default function ProjectBaselinePage() {
   // ── Action handlers ────────────────────────────────────────────────────────
   async function submitBaseline() {
     if (submitting) return;
+    // Guard: capacity check must be done first
+    if (project.planningStatus !== "Pending Approval" && project.baselineStatus !== "Rejected") {
+      setActionError(
+        "Capacity check must be completed before submitting the baseline. " +
+        "Go to Capacity Check and click \"Mark Capacity Checked\" first."
+      );
+      return;
+    }
     setSubmitting(true);
     setActionError("");
     try {
@@ -380,19 +389,10 @@ export default function ProjectBaselinePage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
+      <PlanningFlowNav project={project} projectId={id} />
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-6xl mx-auto">
-          <Link
-            to={`/projects/${id}`}
-            className="inline-flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-700 mb-3 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Project
-          </Link>
-
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-[#0F2240]">Baseline & Approval</h1>

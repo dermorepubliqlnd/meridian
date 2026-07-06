@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
   collection,
@@ -407,14 +408,9 @@ export default function ProjectCapacityPage() {
     <div className="min-h-screen bg-gray-50">
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
+      <PlanningFlowNav project={project} projectId={id} />
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <Link
-          to={`/projects/${id}`}
-          className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1 mb-3"
-        >
-          ← Back to Project
-        </Link>
 
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -461,20 +457,63 @@ export default function ProjectCapacityPage() {
           </div>
         </div>
 
-        {/* Mark Capacity Checked button */}
-        {project.planningStatus === "Resource Check" && (
-          <div className="mt-4">
+      </div>
+
+      {/* ── Action banner: Mark Capacity Checked ───────────────────────── */}
+      {project.planningStatus === "Resource Check" && (
+        <div className="border-b border-emerald-200 bg-emerald-50 px-6 py-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-emerald-800">Ready to proceed to Baseline & Approval?</p>
+                <p className="text-[12px] text-emerald-600 mt-0.5">
+                  Review the capacity data above. When you're satisfied with the resource plan, mark it checked to move to approval.
+                </p>
+              </div>
+            </div>
             <button
               onClick={handleMarkCapacityChecked}
               disabled={markingChecked}
-              className="text-sm font-semibold px-4 py-2 rounded-lg text-white transition disabled:opacity-50"
+              className="flex items-center gap-2 text-[13px] font-semibold px-5 py-2.5 rounded-lg text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 flex-shrink-0"
               style={{ backgroundColor: "#0F2240" }}
             >
-              {markingChecked ? "Updating…" : "Mark Capacity Checked"}
+              {markingChecked ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Updating…
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Mark Capacity Checked
+                </>
+              )}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Already checked banner */}
+      {project.planningStatus === "Pending Approval" && (
+        <div className="border-b border-blue-200 bg-blue-50 px-6 py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-[12px] text-blue-700 font-medium">Capacity checked — baseline submission is now open.</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Two-column body ────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-3 gap-5">

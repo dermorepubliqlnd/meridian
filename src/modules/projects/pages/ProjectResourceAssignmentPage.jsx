@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
+import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
   collection,
@@ -512,30 +513,11 @@ export default function ProjectResourceAssignmentPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <PlanningFlowNav project={project} projectId={id} />
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                              */}
       {/* ------------------------------------------------------------------ */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <Link
-          to={`/projects/${id}`}
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600 transition-colors mb-3"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          Back to Project
-        </Link>
-
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -648,7 +630,10 @@ export default function ProjectResourceAssignmentPage() {
                   {roleDemand.map(({ role, hoursNeeded }) => {
                     const docId = roleDocId(role);
                     const assignment = assignments[docId] ?? null;
-                    const eligibleUsers = matchUsersToRole(users, role);
+                    // All project team members can be assigned to any role
+                    const eligibleUsers = users.filter(
+                      (u) => project?.memberIds?.includes(u.id)
+                    );
 
                     return (
                       <AssignmentRow
