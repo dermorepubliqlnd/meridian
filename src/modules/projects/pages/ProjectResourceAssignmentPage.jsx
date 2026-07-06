@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
+  collectionGroup,
   collection,
   query,
   orderBy,
@@ -176,12 +177,13 @@ function PersonPicker({ allUsers, matchedUsers, currentUserId, onSelect }) {
 // ---------------------------------------------------------------------------
 // Single slot row (one person within a role)
 // ---------------------------------------------------------------------------
-function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeeks, onUpdateSlot, onRemoveSlot, canRemove }) {
-  const [allocationPct, setAllocationPct] = useState(slot.allocationPct ?? 100);
+function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeeks, committedHrsPerWeekByUser, onUpdateSlot, onRemoveSlot, canRemove }) {
+  // allocationPct = % of the person's weekly project capacity committed to THIS project
+  const [allocationPct, setAllocationPct] = useState(slot.allocationPct ?? 20);
   const [notes, setNotes] = useState(slot.notes ?? "");
 
   useEffect(() => {
-    setAllocationPct(slot.allocationPct ?? 100);
+    setAllocationPct(slot.allocationPct ?? 20);
     setNotes(slot.notes ?? "");
   }, [slot.allocationPct, slot.notes]);
 
@@ -190,14 +192,20 @@ function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeek
     return allUsers.find((u) => u.id === slot.userId) ?? null;
   }, [allUsers, slot.userId]);
 
-  const allocatedHrs = hoursNeeded * (allocationPct / 100);
+  // New model: allocationPct = % of weekly project capacity
+  const weeklyCapacity        = assignedUser ? userWeeklyProjectHours(assignedUser) : 0;
+  const allocHrsPerWeek       = weeklyCapacity * (allocationPct / 100);   // h/wk committed to THIS project
+  const allocHrsTotal         = allocHrsPerWeek * planningWeeks;          // total hours over window
 
-  const availabilityInfo = useMemo(() => {
-    if (!assignedUser) return null;
-    const available = userWeeklyProjectHours(assignedUser) * planningWeeks;
-    const remaining = available - allocatedHrs;
-    return { available, remaining, ...getAvailabilityLabel(remaining) };
-  }, [assignedUser, planningWeeks, allocatedHrs]);
+  // Cross-project weekly commitment from OTHER active projects
+  const committedElsewhere    = assignedUser ? (committedHrsPerWeekByUser?.[assignedUser.id] ?? 0) : 0;
+
+  const totalWeeklyUsed       = allocHrsPerWeek + committedElsewhere;
+  const freePerWeek           = Math.max(0, weeklyCapacity - totalWeeklyUsed);
+  const overloaded            = assignedUser && totalWeeklyUsed > weeklyCapacity;
+  const utilPct               = weeklyCapacity > 0
+    ? Math.min(100, Math.round((totalWeeklyUsed / weeklyCapacity) * 100))
+    : 0;
 
   function commitAllocation() {
     const pct = Math.min(100, Math.max(0, Number(allocationPct) || 0));
@@ -221,7 +229,7 @@ function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeek
         />
       </td>
 
-      {/* Allocation % */}
+      {/* Allocation % — % of weekly capacity */}
       <td className="px-4 py-3 align-middle">
         <div className="flex items-center gap-1">
           <input
@@ -233,19 +241,45 @@ function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeek
           />
           <span className="text-sm text-gray-500">%</span>
         </div>
-        <p className="text-[10px] text-gray-400 mt-0.5">= {allocatedHrs.toFixed(1)}h</p>
+        {assignedUser && (
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            = {allocHrsPerWeek.toFixed(1)}h/wk · {allocHrsTotal.toFixed(1)}h total
+          </p>
+        )}
       </td>
 
-      {/* Availability */}
-      <td className="px-4 py-3 align-middle">
-        {availabilityInfo ? (
-          <div className="space-y-1">
-            <p className="text-[11px] text-gray-500">{availabilityInfo.available.toFixed(1)}h pool</p>
-            <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${availabilityInfo.cls}`}>
-              {availabilityInfo.label}
-            </span>
+      {/* Weekly availability indicator */}
+      <td className="px-4 py-3 align-middle min-w-[170px]">
+        {assignedUser ? (
+          <div className="space-y-1.5">
+            {/* Free / utilization */}
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-[12px] font-semibold ${overloaded ? "text-red-500" : freePerWeek < 2 ? "text-amber-600" : "text-emerald-600"}`}>
+                {freePerWeek.toFixed(1)} h/wk free
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                overloaded ? "bg-red-50 text-red-500" : utilPct > 80 ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+              }`}>
+                {utilPct}%
+              </span>
+            </div>
+            {/* Utilization bar */}
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${overloaded ? "bg-red-400" : utilPct > 80 ? "bg-amber-400" : "bg-emerald-400"}`}
+                style={{ width: `${Math.min(100, utilPct)}%` }}
+              />
+            </div>
+            {/* Breakdown */}
+            <p className="text-[10px] text-gray-400 leading-tight">
+              {allocHrsPerWeek.toFixed(1)}h this
+              {committedElsewhere > 0 && ` · ${committedElsewhere.toFixed(1)}h other projects`}
+              {" · "}{weeklyCapacity.toFixed(1)}h/wk cap
+            </p>
           </div>
-        ) : <span className="text-gray-300 text-sm">—</span>}
+        ) : (
+          <span className="text-gray-300 text-sm">—</span>
+        )}
       </td>
 
       {/* Notes */}
@@ -258,8 +292,8 @@ function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeek
             placeholder="Notes…"
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
-          {availabilityInfo?.remaining < 0 && (
-            <span title="Overallocated" className="text-amber-500 text-base shrink-0">⚠</span>
+          {overloaded && (
+            <span title="Overallocated across all projects" className="text-red-500 text-base shrink-0">⚠</span>
           )}
         </div>
       </td>
@@ -282,7 +316,7 @@ function SlotRow({ role, hoursNeeded, slot, matchedUsers, allUsers, planningWeek
 // ---------------------------------------------------------------------------
 // Assignment row — groups all slots for one role
 // ---------------------------------------------------------------------------
-function AssignmentRow({ role, hoursNeeded, matchedUsers, allUsers, assignment, planningWeeks, onUpdateSlot, onAddSlot, onRemoveSlot, onUpdateSme }) {
+function AssignmentRow({ role, hoursNeeded, matchedUsers, allUsers, assignment, planningWeeks, committedHrsPerWeekByUser, onUpdateSlot, onAddSlot, onRemoveSlot, onUpdateSme }) {
   const [smeName, setSmeName] = useState(assignment?.smeName ?? "");
   const isSME = role === "SME";
   const slots = assignment?.assignees ?? [];
@@ -291,15 +325,32 @@ function AssignmentRow({ role, hoursNeeded, matchedUsers, allUsers, assignment, 
 
   const assignedCount = isSME ? (smeName ? 1 : 0) : slots.filter((s) => s.userId).length;
 
+  // WBS coverage: sum of committed hours across all assigned slots
+  const committedHrsTotal = isSME ? 0 : slots.reduce((sum, s) => {
+    if (!s.userId) return sum;
+    const u = allUsers.find((u) => u.id === s.userId);
+    if (!u) return sum;
+    return sum + (s.allocationPct / 100) * userWeeklyProjectHours(u) * planningWeeks;
+  }, 0);
+  const coveragePct = hoursNeeded > 0 ? Math.round((committedHrsTotal / hoursNeeded) * 100) : 0;
+  const covered     = committedHrsTotal >= hoursNeeded;
+
   return (
     <>
       {/* Role header row */}
       <tr className="bg-gray-50/80">
         <td className="px-4 py-3 align-middle" colSpan={2}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-gray-800 text-sm">{role}</span>
             {isSME && <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full font-medium">External</span>}
-            <span className="text-[11px] text-gray-400">{hoursNeeded}h total</span>
+            <span className="text-[11px] text-gray-400">{hoursNeeded}h needed</span>
+            {!isSME && committedHrsTotal > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border ${
+                covered ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-amber-50 text-amber-600 border-amber-200"
+              }`}>
+                {committedHrsTotal.toFixed(1)}h committed {covered ? "✓" : `(${coveragePct}%)`}
+              </span>
+            )}
             {assignedCount > 0 && !isSME && (
               <span className="text-[10px] bg-teal-50 text-teal-600 border border-teal-200 px-1.5 py-0.5 rounded-full font-medium">
                 {assignedCount} assigned
@@ -346,6 +397,7 @@ function AssignmentRow({ role, hoursNeeded, matchedUsers, allUsers, assignment, 
           matchedUsers={matchedUsers}
           allUsers={allUsers}
           planningWeeks={planningWeeks}
+          committedHrsPerWeekByUser={committedHrsPerWeekByUser}
           onUpdateSlot={(slotId, data) => onUpdateSlot(role, slotId, data)}
           onRemoveSlot={(slotId) => onRemoveSlot(role, slotId)}
           canRemove={slots.length > 1}
@@ -374,6 +426,7 @@ export default function ProjectResourceAssignmentPage() {
   const [tasks, setTasks] = useState(null);
   const [users, setUsers] = useState(null);
   const [assignments, setAssignments] = useState(null);
+  const [allAssignmentsFlat, setAllAssignmentsFlat] = useState([]); // cross-project flat list
   const [planningWindow, setPlanningWindow] = useState(null); // null = not yet loaded
   const [toast, setToast] = useState(null);
 
@@ -433,6 +486,38 @@ export default function ProjectResourceAssignmentPage() {
     return unsub;
   }, [id]);
 
+  // ---- Cross-project assignments (all other projects) ----
+  useEffect(() => {
+    const unsub = onSnapshot(collectionGroup(db, "assignments"), (snap) => {
+      const flat = [];
+      snap.docs.forEach((d) => {
+        const projectId = d.ref.parent?.parent?.id;
+        if (!projectId || projectId === id) return; // skip current project
+        const data = d.data();
+        (data.assignees || []).forEach((slot) => {
+          if (slot.userId) {
+            flat.push({ projectId, userId: slot.userId, allocationPct: slot.allocationPct ?? 20 });
+          }
+        });
+      });
+      setAllAssignmentsFlat(flat);
+    });
+    return unsub;
+  }, [id]);
+
+  // ---- Committed hrs/wk per user from OTHER active projects ----
+  const committedHrsPerWeekByUser = useMemo(() => {
+    if (!users || !allAssignmentsFlat.length) return {};
+    const result = {};
+    allAssignmentsFlat.forEach(({ userId, allocationPct }) => {
+      const user = users.find((u) => u.id === userId);
+      if (!user) return;
+      const hrsPerWeek = (allocationPct / 100) * userWeeklyProjectHours(user);
+      result[userId] = (result[userId] || 0) + hrsPerWeek;
+    });
+    return result;
+  }, [users, allAssignmentsFlat]);
+
   // ---- Derived: role demand from WBS top-level tasks ----
   const roleDemand = useMemo(() => {
     if (!tasks) return [];
@@ -469,7 +554,7 @@ export default function ProjectResourceAssignmentPage() {
   async function addSlot(role) {
     const docId = roleDocId(role);
     const existing = assignments?.[docId] ?? { role, assignees: [], smeName: "" };
-    const newSlot = { slotId: `slot-${Date.now()}`, userId: null, allocationPct: 100, notes: "" };
+    const newSlot = { slotId: `slot-${Date.now()}`, userId: null, allocationPct: 20, notes: "" };
     const assignees = [...existing.assignees, newSlot];
     await setDoc(doc(db, "projects", id, "assignments", docId),
       { role, assignees, smeName: existing.smeName, updatedAt: serverTimestamp() },
@@ -692,7 +777,7 @@ export default function ProjectResourceAssignmentPage() {
                     {[
                       "Role / Assigned To",
                       "Allocation %",
-                      `Availability (Next ${planningWeeks} Wks)`,
+                      "Weekly Availability",
                       "Notes / Status",
                       "",
                     ].map((col, i) => (
@@ -726,6 +811,7 @@ export default function ProjectResourceAssignmentPage() {
                         allUsers={users}
                         assignment={assignment}
                         planningWeeks={planningWeeks}
+                        committedHrsPerWeekByUser={committedHrsPerWeekByUser}
                         onUpdateSlot={updateSlot}
                         onAddSlot={addSlot}
                         onRemoveSlot={removeSlot}
@@ -779,15 +865,18 @@ export default function ProjectResourceAssignmentPage() {
               <p className="text-2xl font-bold text-[#0F2240] mt-1">
                 {
                   roleDemand.filter((rd) => {
-                    const a = assignments[roleDocId(rd.role)];
-                    if (!a?.userId) return false;
-                    const user = users.find((u) => u.id === a.userId);
-                    if (!user) return false;
-                    const available =
-                      userWeeklyProjectHours(user) * planningWeeks;
-                    const allocated =
-                      rd.hoursNeeded * ((a.allocationPct ?? 100) / 100);
-                    return available - allocated < 0;
+                    if (rd.role === "SME") return false;
+                    const docAssign = assignments?.[roleDocId(rd.role)];
+                    if (!docAssign?.assignees?.length) return false;
+                    return docAssign.assignees.some((slot) => {
+                      if (!slot.userId) return false;
+                      const user = users.find((u) => u.id === slot.userId);
+                      if (!user) return false;
+                      const weeklyCapacity = userWeeklyProjectHours(user);
+                      const thisProjectHrsPerWeek = (slot.allocationPct / 100) * weeklyCapacity;
+                      const totalPerWeek = thisProjectHrsPerWeek + (committedHrsPerWeekByUser[slot.userId] || 0);
+                      return totalPerWeek > weeklyCapacity;
+                    });
                   }).length
                 }
               </p>

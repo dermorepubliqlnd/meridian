@@ -44,7 +44,7 @@ function matchUsersToRole(users, role) {
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
 function fmt(n) {
-  return Number.isFinite(n) ? Math.round(n) : 0;
+  return Number.isFinite(n) ? (Number.isInteger(n) ? n : Number(n).toFixed(1)) : 0;
 }
 
 function utilPct(used, total) {

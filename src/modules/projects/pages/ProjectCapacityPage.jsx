@@ -240,11 +240,11 @@ export default function ProjectCapacityPage() {
         const role = data.role || d.id;
         if (data.assignees?.length) {
           data.assignees.forEach((slot) => {
-            if (slot.userId) flat.push({ id: `${d.id}-${slot.slotId}`, role, userId: slot.userId, allocationPct: slot.allocationPct ?? 100 });
+            if (slot.userId) flat.push({ id: `${d.id}-${slot.slotId}`, role, userId: slot.userId, allocationPct: slot.allocationPct ?? 20 });
           });
         } else if (data.userId) {
           // Legacy single-assignee format
-          flat.push({ id: d.id, role, userId: data.userId, allocationPct: data.allocationPct ?? 100 });
+          flat.push({ id: d.id, role, userId: data.userId, allocationPct: data.allocationPct ?? 20 });
         }
       });
       setAssignments(flat);
@@ -309,9 +309,9 @@ export default function ProjectCapacityPage() {
         : 0;
       const effectiveWeeks = Math.max(0, planningWeeks - holidayCount / 5);
       const availableHrs = userWeeklyProjectHours(user) * effectiveWeeks;
-      const roleHours = hoursByRole[asgn.role] || 0;
-      const allocationFactor = (asgn.allocationPct || 100) / 100;
-      const hoursNeeded = roleHours * allocationFactor;
+      // New model: allocationPct = % of weekly capacity committed to this project
+      const allocationFactor = (asgn.allocationPct || 20) / 100;
+      const hoursNeeded = allocationFactor * userWeeklyProjectHours(user) * effectiveWeeks;
       const gap = availableHrs - hoursNeeded;
       const status = capacityStatus(gap);
 
@@ -321,7 +321,7 @@ export default function ProjectCapacityPage() {
         name: user.name || "Unknown",
         jobTitle: user.jobTitle || "",
         role: asgn.role,
-        allocationPct: asgn.allocationPct || 100,
+        allocationPct: asgn.allocationPct || 20,
         availableHrs,
         hoursNeeded,
         gap,
