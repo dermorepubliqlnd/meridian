@@ -685,6 +685,92 @@ export default function ProjectCapacityPage() {
         </div>
       </div>
 
+      {/* ── Per-Person Capacity Breakdown ─────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 pb-5">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-[13px] font-bold" style={{ color: "#0F2240" }}>Per-Person Capacity Breakdown</h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Compares what this project needs from each person vs. their realistic available capacity (based on their project capacity % setting).
+              </p>
+            </div>
+          </div>
+          <table className="w-full text-[12px]">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {["Person", "Role", "Project Demand", "Capacity Pool (" + planningWeeks + "wk)", "Pool Utilization", "Remaining", "Status"].map((h) => (
+                  <th key={h} className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {personCapacity.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-[12px]">No assignments yet. Assign team members in Resource Assignment first.</td></tr>
+              ) : personCapacity.map((p) => {
+                const poolUtilPct = p.availableHrs > 0 ? Math.round((p.hoursNeeded / p.availableHrs) * 100) : 0;
+                const barColor = poolUtilPct > 100 ? "bg-red-500" : poolUtilPct > 85 ? "bg-amber-400" : poolUtilPct > 60 ? "bg-teal-400" : "bg-emerald-400";
+                const statusCls = p.gap < 0 ? "bg-red-100 text-red-700" : p.gap <= 5 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700";
+                const statusLabel = p.gap < 0 ? "Overallocated" : p.gap <= 5 ? "Tight" : "Available";
+                return (
+                  <tr key={p.assignmentId} className="hover:bg-gray-50/50">
+                    {/* Person */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: "#14B8A6" }}>
+                          {(p.name || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)}
+                        </div>
+                        <span className="font-medium text-gray-800">{p.name}</span>
+                      </div>
+                    </td>
+                    {/* Role */}
+                    <td className="px-4 py-3 text-gray-500">{p.role}</td>
+                    {/* Project Demand */}
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-navy">{p.hoursNeeded.toFixed(1)}h</span>
+                      <div className="text-[10px] text-gray-400">this project needs</div>
+                    </td>
+                    {/* Capacity Pool */}
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-gray-700">{p.availableHrs.toFixed(1)}h</span>
+                      <div className="text-[10px] text-gray-400">{(p.availableHrs / planningWeeks).toFixed(1)}h/wk available</div>
+                    </td>
+                    {/* Pool Utilization */}
+                    <td className="px-4 py-3 min-w-[140px]">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(poolUtilPct, 100)}%` }} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-gray-700 w-8 text-right">{poolUtilPct}%</span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">of {planningWeeks}-wk pool</div>
+                    </td>
+                    {/* Remaining */}
+                    <td className="px-4 py-3">
+                      <span className={`font-semibold ${p.gap < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                        {p.gap >= 0 ? "+" : ""}{p.gap.toFixed(1)}h
+                      </span>
+                      <div className="text-[10px] text-gray-400">for other projects</div>
+                    </td>
+                    {/* Status */}
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusCls}`}>{statusLabel}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {personCapacity.length > 0 && (
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-500 flex gap-6">
+              <span>Total project demand: <strong className="text-gray-700">{totalNeeded.toFixed(1)}h</strong></span>
+              <span>Combined pool ({planningWeeks}wk): <strong className="text-gray-700">{totalAvailable.toFixed(1)}h</strong></span>
+              <span>Avg pool utilization: <strong className={totalNeeded/totalAvailable > 0.9 ? "text-red-600" : totalNeeded/totalAvailable > 0.6 ? "text-amber-600" : "text-emerald-600"}>{Math.round((totalNeeded/totalAvailable)*100)}%</strong></span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── Recommended Actions ────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 pb-6">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
