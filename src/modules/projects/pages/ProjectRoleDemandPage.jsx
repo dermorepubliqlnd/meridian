@@ -188,10 +188,21 @@ function TeamMembersSection({ roleDemand, users }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+
+// Compute project duration in weeks from startDate → targetLaunchDate (rounded up, min 1)
+function projectDurationWeeks(project) {
+  if (!project?.startDate || !project?.targetLaunchDate) return 8;
+  const start = new Date(project.startDate + "T00:00:00");
+  const end   = new Date(project.targetLaunchDate + "T00:00:00");
+  const days  = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  return Math.max(1, Math.ceil(days / 7));
+}
+
 const WINDOW_OPTIONS = [
   { label: "4 weeks",  value: 4  },
   { label: "8 weeks",  value: 8  },
   { label: "12 weeks", value: 12 },
+  { label: "16 weeks", value: 16 },
 ];
 
 export default function ProjectRoleDemandPage() {
@@ -201,7 +212,7 @@ export default function ProjectRoleDemandPage() {
   const [project, setProject]         = useState(null);
   const [tasks,   setTasks]           = useState([]);
   const [users,   setUsers]           = useState([]);
-  const [planningWeeks, setPlanningWeeks] = useState(8);
+  const [planningWeeks, setPlanningWeeks] = useState(null);
   const [toastMsg, setToastMsg]       = useState(null);
   const [recalcKey, setRecalcKey]     = useState(0);
 
@@ -235,9 +246,17 @@ export default function ProjectRoleDemandPage() {
     });
   }, []);
 
+  // Auto-set planning window from project duration once project loads
+  useEffect(() => {
+    if (project && planningWeeks === null) {
+      setPlanningWeeks(projectDurationWeeks(project));
+    }
+  }, [project, planningWeeks]);
+
   // ── Derived data — role demand ──────────────────────────────────────────────
 
   const roleDemand = useMemo(() => {
+    if (planningWeeks === null) return [];
     // eslint-disable-next-line no-unused-expressions
     recalcKey; // subscribe to recalc trigger
 

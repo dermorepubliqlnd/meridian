@@ -14,8 +14,18 @@ import { userWeeklyProjectHours } from "../../../lib/bandwidth";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const PLANNING_WINDOW_OPTIONS = [4, 8, 12];
-const DEFAULT_PLANNING_WEEKS = 8;
+const PLANNING_WINDOW_OPTIONS = [4, 8, 12, 16];
+
+// Compute project duration in weeks from startDate → targetLaunchDate (rounded up, min 1)
+function projectDurationWeeks(project) {
+  if (!project?.startDate || !project?.targetLaunchDate) return 8;
+  const start = new Date(project.startDate + "T00:00:00");
+  const end   = new Date(project.targetLaunchDate + "T00:00:00");
+  const days  = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  return Math.max(1, Math.ceil(days / 7));
+}
+
+const DEFAULT_PLANNING_WEEKS = null; // set from project duration on load
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -177,7 +187,7 @@ export default function ProjectCapacityPage() {
   const [tasks, setTasks] = useState(null);
   const [users, setUsers] = useState(null);
   const [assignments, setAssignments] = useState(null);
-  const [planningWeeks, setPlanningWeeks] = useState(DEFAULT_PLANNING_WEEKS);
+  const [planningWeeks, setPlanningWeeks] = useState(null);
   const [toast, setToast] = useState(null);
   const [markingChecked, setMarkingChecked] = useState(false);
 
