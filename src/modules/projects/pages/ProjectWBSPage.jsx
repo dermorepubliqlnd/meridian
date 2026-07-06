@@ -566,38 +566,35 @@ export default function ProjectWBSPage() {
               <p className="text-[11px] text-gray-400 mb-4">
                 Enter your TPS-scoped hour estimates per phase. These appear as targets on each phase header in the WBS below, so you can track alignment as you build out the task list.
               </p>
+              {/* Research is always first — universal prep phase */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                {[
-                  { key: "research",  label: "Research" },
-                  { key: "analysis",  label: "Analysis" },
-                  { key: "learn",     label: "Learn" },
-                  { key: "engage",    label: "Engage" },
-                  { key: "apply",     label: "Apply" },
-                  { key: "prove",     label: "Prove" },
-                ].map(({ key, label }) => (
-                  <div key={key}>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{label}</label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={tpsEstimates[key] || ""}
-                        onChange={(e) => {
-                          const updated = { ...tpsEstimates, [key]: parseFloat(e.target.value) || 0 };
-                          setTpsEstimates(updated);
-                        }}
-                        onBlur={(e) => {
-                          const updated = { ...tpsEstimates, [key]: parseFloat(e.target.value) || 0 };
-                          saveTpsEstimates(updated);
-                        }}
-                        placeholder="0"
-                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-800 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                      />
-                      <span className="text-[11px] text-gray-400">h</span>
+                {(["Research", ...phases]).map((label) => {
+                  const key = label.toLowerCase().replace(/[^a-z]/g, "");
+                  return (
+                    <div key={key}>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{label}</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={tpsEstimates[key] || ""}
+                          onChange={(e) => {
+                            const updated = { ...tpsEstimates, [key]: parseFloat(e.target.value) || 0 };
+                            setTpsEstimates(updated);
+                          }}
+                          onBlur={(e) => {
+                            const updated = { ...tpsEstimates, [key]: parseFloat(e.target.value) || 0 };
+                            saveTpsEstimates(updated);
+                          }}
+                          placeholder="0"
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-800 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                        />
+                        <span className="text-[11px] text-gray-400">h</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <p className="text-[10px] text-gray-400">
