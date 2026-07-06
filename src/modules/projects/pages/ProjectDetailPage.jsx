@@ -462,6 +462,17 @@ export default function ProjectDetailPage() {
     return () => { unsubProject(); unsubTasks(); unsubUsers(); };
   }, [id]);
 
+  const [activityLog, setActivityLog] = useState([]);
+
+  useEffect(() => {
+    if (!id) return;
+    const unsub = onSnapshot(
+      query(collection(db, "projects", id, "activity"), orderBy("createdAt", "desc")),
+      (snap) => setActivityLog(snap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 10))
+    );
+    return unsub;
+  }, [id]);
+
   if (!project) return <p className="text-[13px] text-gray-400 p-4">Loading project...</p>;
 
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
@@ -790,6 +801,61 @@ export default function ProjectDetailPage() {
   const phaseOrder = [];
   topLevelTasks.forEach((t) => { if (!phaseOrder.includes(t.phase)) phaseOrder.push(t.phase); });
 
+  const PLANNING_STAGES = ["Draft / Intake","WBS Pending","Resource Check","Pending Approval","Active","Done"];
+  const STAGE_DISPLAY = {
+    "Draft / Intake":   "Intake",
+    "WBS Pending":      "WBS Effort",
+    "Resource Check":   "Resource Check",
+    "Pending Approval": "Approval",
+    "Active":           "Active",
+    "At Risk / Behind": "Active",
+    "Done":             "Complete",
+  };
+  const STAGE_BADGE_STYLES = {
+    "Draft / Intake":   "bg-blue-100 text-blue-700",
+    "WBS Pending":      "bg-purple-100 text-purple-700",
+    "Resource Check":   "bg-orange-100 text-orange-700",
+    "Pending Approval": "bg-yellow-100 text-yellow-700",
+    "Active":           "bg-emerald-100 text-emerald-700",
+    "At Risk / Behind": "bg-red-100 text-red-700",
+    "Done":             "bg-gray-100 text-gray-600",
+  };
+  const PRIORITY_BADGE = {
+    High:   "bg-red-100 text-red-700",
+    Medium: "bg-amber-100 text-amber-700",
+    Low:    "bg-emerald-100 text-emerald-700",
+  };
+  const WHATS_NEXT = {
+    "Draft / Intake":   { desc: "Confirm the estimated hours for each WBS task and select the required roles. This will allow Meridian to calculate total role demand.", cta: "Go to WBS" },
+    "WBS Pending":      { desc: "WBS hours are set. Assign the required roles to specific team members so resource capacity can be checked.", cta: "Go to WBS" },
+    "Resource Check":   { desc: "Review resource capacity gaps and resolve any conflicts before submitting the baseline for approval.", cta: "Review Capacity" },
+    "Pending Approval": { desc: "The baseline has been submitted. Waiting for the approver to review and approve the project schedule.", cta: "View Baseline" },
+    "Active":           { desc: "Project is active. Track progress in the WBS, update task statuses, and monitor health.", cta: "Go to WBS" },
+    "At Risk / Behind": { desc: "This project needs attention. Review the timeline and consider requesting a deadline change or reforecasting.", cta: "Go to WBS" },
+    "Done":             { desc: "Project is complete. Review the final summary and close out any remaining tasks.", cta: "View Summary" },
+  };
+
+  const planningStage = (() => {
+    if (project.planningStatus === "Draft / Intake")    return "Draft / Intake";
+    if (project.planningStatus === "WBS Pending")       return "WBS Pending";
+    if (project.planningStatus === "Resource Check")    return "Resource Check";
+    if (project.baselineStatus  === "Pending Approval") return "Pending Approval";
+    const s = project.status || "";
+    if (s === "Done" || s === "Canceled")               return "Done";
+    if (s === "Active" && (health?.label === "At Risk" || health?.label === "Behind Schedule")) return "At Risk / Behind";
+    if (s === "Active")                                 return "Active";
+    return "Draft / Intake";
+  })();
+
+  const totalWBSHours = topLevelTasks.reduce((s, t) => {
+    const kids = childrenByParent[t.id] || [];
+    return s + (kids.length ? kids.reduce((cs, c) => cs + (c.estimatedHours || 0), 0) : (t.estimatedHours || 0));
+  }, 0);
+  const requiredRolesCount = new Set(topLevelTasks.map(t => t.responsibleRole).filter(Boolean)).size;
+  const stepperStages = PLANNING_STAGES.filter(s => s !== "At Risk / Behind");
+  const activeStepperStage = planningStage === "At Risk / Behind" ? "Active" : planningStage;
+  const whatsNext = WHATS_NEXT[planningStage] || WHATS_NEXT["Draft / Intake"];
+
   return (
     <div>
       <Link to="/projects" className="text-[11px] text-navy underline">← Back to Projects</Link>
@@ -797,7 +863,7 @@ export default function ProjectDetailPage() {
       {/* ── Intake next-step banner ── */}
       {showIntakeBanner && (
         <div className="mt-3 mb-2 flex items-start gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3">
-          <span className="text-teal-500 text-lg shrink-0">✦</span>
+          <span className="text-teal-500 text-lg shrink-0">✶</span>
           <div className="flex-1">
             <div className="text-[13px] font-semibold text-teal-800 mb-0.5">Draft created — WBS generated</div>
             <div className="text-[12px] text-teal-700">
@@ -813,243 +879,213 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-start justify-between mt-2 mb-3">
+      <div className="flex items-start justify-between mt-2 mb-2">
         <div>
-          {/* Title row */}
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold font-heading text-navy">{project.name}</h2>
-            <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>
-            <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${{
-              High:   "bg-red-50 text-red-700 border-red-200",
-              Medium: "bg-yellow-50 text-yellow-700 border-yellow-200",
-              Low:    "bg-emerald-50 text-emerald-700 border-emerald-200",
-            }[project.priority] || "bg-gray-100 text-gray-500 border-gray-200"}`}>{project.priority}</span>
-          </div>
-          {project.description && <p className="text-[12px] text-gray-500 mt-1 mb-0.5">{project.description}</p>}
-          {/* Status / Phase / Health pill row with labels */}
-          <div className="flex items-end gap-4 mt-2 flex-wrap">
-            {/* Status */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Status</span>
-              <select
-                value={PROJECT_STATUSES.includes(project.status) ? project.status : "Active"}
-                onChange={(e) => updateDoc(doc(db, "projects", id), { status: e.target.value })}
-                className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${STATUS_STYLES[project.status] || STATUS_STYLES["Active"]}`}
-              >
-                {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            {/* Phase */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Phase</span>
-              <select
-                value={PROJECT_PHASES.includes(project.phase) ? project.phase : "Scoping"}
-                onChange={(e) => updateDoc(doc(db, "projects", id), { phase: e.target.value })}
-                className={`appearance-none cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-teal ${PHASE_STYLES[project.phase] || PHASE_STYLES["Scoping"]}`}
-              >
-                {PROJECT_PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            {/* Health */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Health</span>
-              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${health.style}`}>
-                {health.label}
-                {health.isOverridden && <span className="ml-1 text-[9px] opacity-70">(manual)</span>}
-              </span>
-            </div>
-            {(isOwner || isAdmin) && health.rag !== "grey" && (
-              <button
-                onClick={() => {
-                  const note = window.prompt("Override health reason (required):");
-                  if (!note) return;
-                  const rags = ["green","amber","red"];
-                  const cur = health.isOverridden ? health.rag : health.rag;
-                  const idx = rags.indexOf(cur);
-                  const next = rags[(idx + 1) % rags.length];
-                  updateDoc(doc(db, "projects", id), { healthOverride: { rag: next, note } });
-                  addDoc(collection(db, "projects", id, "activity"), {
-                    type: "health_override", message: `Health manually set to ${next === "green" ? "On Track" : next === "amber" ? "At Risk" : "Behind Schedule"}. Reason: ${note}`,
-                    uid: user.uid, createdAt: serverTimestamp(),
-                  });
-                }}
-                className="text-[10px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded px-1.5 py-0.5"
-                title="Override health status"
-              >
-                {health.isOverridden ? "Clear override" : "Override"}
-              </button>
-            )}
-            {health.isOverridden && (isOwner || isAdmin) && (
-              <button
-                onClick={() => updateDoc(doc(db, "projects", id), { healthOverride: null })}
-                className="text-[10px] text-red-400 hover:text-red-600"
-              >✕ clear</button>
-            )}
+            {project.projectCode && <span className="text-[11px] text-gray-400 font-mono">{project.projectCode}</span>}
+            {project.ticketNumber && <span className="text-[11px] text-gray-400 font-mono">#{project.ticketNumber}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {isOwner && project.phase === "Scoping" && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STAGE_BADGE_STYLES[planningStage] || "bg-gray-100 text-gray-600"}`}>
+            {STAGE_DISPLAY[planningStage] || planningStage}
+          </span>
+          {(isOwner || profile?.role === "Admin") && (
             <button
-              onClick={submitBaseline}
-              disabled={!proposedBaseline && !manualBaseline}
-              className="text-[11px] bg-teal text-navy font-semibold px-3 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed border border-teal/60"
-              title={!proposedBaseline && !manualBaseline ? "Add tasks with estimated hours first, or set a manual date in the Baseline section below" : ""}
+              onClick={openEditProject}
+              className="text-[11px] font-medium text-navy border border-gray-300 bg-white rounded-md px-3 py-1 hover:bg-gray-50 transition"
             >
-              Submit for Approval →
+              Edit Project
             </button>
           )}
           {profile?.role === "Admin" && (
             <button onClick={() => setShowDeleteProjectConfirm(true)} className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 rounded-md px-2.5 py-1 hover:border-red-400 transition">
-              Delete project
+              Delete
             </button>
           )}
-          {project.folderUrl && (
+        </div>
+      </div>
+
+      {/* ── Meta row ── */}
+      <div className="flex items-center gap-5 mb-3 flex-wrap text-[12px]">
+        <div className="flex items-center gap-1 text-gray-500">
+          <span className="text-[10px] uppercase tracking-wide font-medium text-gray-400">Owner</span>
+          <span className="text-navy font-medium ml-1">{nameFor(project.ownerId)}</span>
+        </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-1 text-gray-500">
+          <span className="text-[10px] uppercase tracking-wide font-medium text-gray-400">Approver</span>
+          <span className="text-navy font-medium ml-1">{nameFor(project.approverId)}</span>
+        </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] uppercase tracking-wide font-medium text-gray-400">Priority</span>
+          <span className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${PRIORITY_BADGE[project.priority] || "bg-gray-100 text-gray-600"}`}>{project.priority || "—"}</span>
+        </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-1 text-gray-500">
+          <span className="text-[10px] uppercase tracking-wide font-medium text-gray-400">Target Launch</span>
+          <span className="text-navy font-medium ml-1">{project.targetLaunchDate || "—"}</span>
+        </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-1 text-gray-500">
+          <span className="text-[10px] uppercase tracking-wide font-medium text-gray-400">Planning Stage</span>
+          <span className="text-navy font-medium ml-1">{STAGE_DISPLAY[planningStage] || planningStage}</span>
+        </div>
+        {project.folderUrl && (
+          <>
+            <span className="text-gray-300">•</span>
             <a href={project.folderUrl} target="_blank" rel="noreferrer" className="text-[11px] text-teal-700 underline whitespace-nowrap">Project Folder ↗</a>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* ── Project info — form fields ── */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 px-5 py-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Project Details</span>
-            <button
-              onClick={() => setProjectNotePanel(true)}
-              className="text-[10px] text-teal-600 hover:text-teal-800 border border-teal-200 bg-teal-50 rounded-full px-2 py-0.5 hover:bg-teal-100"
-            >
-              Notes & Activity
-            </button>
-          </div>
-          {(isOwner || profile?.role === "Admin") && (
-            <button
-              onClick={openEditProject}
-              className="text-gray-400 hover:text-navy transition p-1 rounded hover:bg-gray-100"
-              title="Edit project settings"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5z"/><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65z"/>
-              </svg>
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-x-10 gap-y-4 text-[12px]">
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Owner</div>
-            <div className="text-navy font-medium">{nameFor(project.ownerId)}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Approver</div>
-            <div className="text-navy font-medium">{nameFor(project.approverId)}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Work Type</div>
-            <div className="text-navy font-medium">{project.workTypeName || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Delivery Format</div>
-            <div className="text-navy font-medium">{project.deliveryFormat || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Training Type</div>
-            <div className="text-navy font-medium">{project.trainingType || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Development Type</div>
-            <div className="text-navy font-medium">{project.developmentType || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Source</div>
-            <div className="text-navy font-medium">
-              {project.source || "—"}
-              {project.source === "Intake Request" && (
-                <div className="text-[11px] text-gray-400 font-normal">{project.requestorName} — {project.requestorDepartment}</div>
-              )}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">SME</div>
-            <div className="text-navy font-medium">{project.smeName || <span className="text-gray-400 italic font-normal">Not yet identified</span>}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Target Launch</div>
-            <div className="text-navy font-medium">{project.targetLaunchDate || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Est. Hours (total)</div>
-            <div className="text-navy font-medium">
-              {(() => {
-                const tot = topLevelTasks.reduce((s, t) => s + (childrenByParent[t.id]?.length ? childrenByParent[t.id].reduce((cs, c) => cs + (c.estimatedHours || 0), 0) : (t.estimatedHours || 0)), 0);
-                return tot ? `${tot} hrs` : "—";
-              })()}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Actual Hours (total)</div>
-            <div className="text-navy font-medium">
-              {(() => {
-                const tot = topLevelTasks.reduce((s, t) => s + (childrenByParent[t.id]?.length ? childrenByParent[t.id].reduce((cs, c) => cs + (c.actualHours || 0), 0) : (t.actualHours || 0)), 0);
-                return tot ? `${tot} hrs` : "—";
-              })()}
-            </div>
-          </div>
-          <div className="col-span-3">
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Completion</div>
-              {overdueTasks.length > 0 && (
-                <span className="text-[11px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
-                  ⚠ {overdueTasks.length} overdue task{overdueTasks.length > 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-navy font-bold text-lg">{Math.round(projectCompletion)}%</span>
-              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-teal rounded-full" style={{ width: `${Math.round(projectCompletion)}%` }} />
-              </div>
-              <span className="text-[11px] text-gray-400 whitespace-nowrap">{project.actualCompletionDate || "No completion date"}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Team Members ── */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[12px] font-semibold text-gray-500 uppercase tracking-wide">Team Members</h3>
-          {(isOwner || profile?.role === "Admin") && (
-            <TeamMemberManager
-              projectId={id}
-              memberIds={project.memberIds || []}
-              ownerId={project.ownerId}
-              approverId={project.approverId}
-              allUsers={users}
-            />
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {members.length === 0 && <span className="text-[12px] text-gray-400 italic">No additional team members.</span>}
-          {members.map((m) => {
-            const initials = m.name?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
-            const isCore = m.id === project.ownerId || m.id === project.approverId;
+      {/* ── Progress stepper ── */}
+      <div className="bg-white rounded-lg border border-gray-100 shadow-sm px-5 py-3 mb-4">
+        <div className="flex items-center justify-between">
+          {stepperStages.map((stage, idx) => {
+            const stageIdx = stepperStages.indexOf(activeStepperStage);
+            const isPast    = idx < stageIdx;
+            const isCurrent = stage === activeStepperStage;
             return (
-              <div key={m.id} className="flex items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-full px-2.5 py-1">
-                <div className="w-5 h-5 rounded-full bg-navy text-white text-[9px] font-bold flex items-center justify-center">{initials}</div>
-                <span className="text-[12px] text-gray-700">{m.name}</span>
-                {isCore && <span className="text-[9px] text-gray-400">{m.id === project.ownerId ? "Owner" : "Approver"}</span>}
-                {!isCore && (isOwner || profile?.role === "Admin") && (
-                  <button
-                    onClick={async () => {
-                      const updated = (project.memberIds || []).filter((uid) => uid !== m.id);
-                      await updateDoc(doc(db, "projects", id), { memberIds: updated });
-                    }}
-                    className="text-gray-300 hover:text-red-400 text-[10px] ml-0.5"
-                  >✕</button>
+              <div key={stage} className="flex items-center flex-1 last:flex-none">
+                <div className="flex flex-col items-center gap-1 min-w-0">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-colors ${
+                    isCurrent ? "bg-teal border-teal text-white" :
+                    isPast    ? "bg-teal/20 border-teal/40 text-teal-700" :
+                                "bg-gray-100 border-gray-200 text-gray-400"
+                  }`}>
+                    {isPast ? "✓" : idx + 1}
+                  </div>
+                  <span className={`text-[10px] font-medium whitespace-nowrap ${isCurrent ? "text-teal-700" : isPast ? "text-teal-600" : "text-gray-400"}`}>
+                    {STAGE_DISPLAY[stage]}
+                  </span>
+                </div>
+                {idx < stepperStages.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-2 mb-4 rounded ${isPast || isCurrent ? "bg-teal/40" : "bg-gray-200"}`} />
                 )}
               </div>
             );
           })}
         </div>
+      </div>
+
+      {/* ── 3-panel row ── */}
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        {/* At a Glance */}
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm px-4 py-3">
+          <div className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-2">At a Glance</div>
+          <div className="space-y-1.5 text-[12px]">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Work Type</span>
+              <span className="text-navy font-medium">{project.workTypeName || project.trainingType || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Dev Level</span>
+              <span className="text-navy font-medium">{project.developmentType || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Delivery Format</span>
+              <span className="text-navy font-medium">{project.deliveryFormat || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Deadline Flexibility</span>
+              <span className="text-navy font-medium">{project.deadlineFlexibility || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total WBS Effort</span>
+              <span className="text-navy font-medium">{totalWBSHours ? `${totalWBSHours} hrs` : "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Required Roles</span>
+              <span className="text-navy font-medium">{requiredRolesCount || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Contributors</span>
+              <span className="text-navy font-medium">{(project.memberIds || []).length || "—"}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Planning Summary */}
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm px-4 py-3">
+          <div className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-2">Planning Summary</div>
+          <div className="space-y-1.5 text-[12px]">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Start Date</span>
+              <span className="text-navy font-medium">{project.startDate || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Target Launch</span>
+              <span className="text-navy font-medium">{project.targetLaunchDate || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Dev Level</span>
+              <span className="text-navy font-medium">{project.developmentType || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Delivery Format</span>
+              <span className="text-navy font-medium">{project.deliveryFormat || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Deadline Driver</span>
+              <span className="text-navy font-medium">{project.deadlineDriver || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Required Roles</span>
+              <span className="text-navy font-medium">{requiredRolesCount || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Status</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STAGE_BADGE_STYLES[planningStage] || "bg-gray-100 text-gray-500"}`}>{STAGE_DISPLAY[planningStage] || planningStage}</span>
+            </div>
+            <div className="flex justify-between items-start gap-2">
+              <span className="text-gray-500 shrink-0">Your Step</span>
+              <span className="text-navy font-medium text-right text-[11px]">{whatsNext.desc.split(".")[0]}.</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Activity Feed */}
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm px-4 py-3 flex flex-col">
+          <div className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-2">Activity Feed</div>
+          <div className="flex-1 overflow-y-auto max-h-52 space-y-2">
+            {activityLog.length === 0 && (
+              <p className="text-[11px] text-gray-400 italic">No activity yet.</p>
+            )}
+            {activityLog.map((entry) => (
+              <div key={entry.id} className="flex flex-col gap-0.5 border-b border-gray-50 pb-1.5 last:border-0">
+                <span className="text-[11px] text-gray-700 leading-snug">{entry.message}</span>
+                <span className="text-[10px] text-gray-400">
+                  {entry.createdAt?.toDate
+                    ? entry.createdAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                    : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setProjectNotePanel(true)}
+            className="mt-2 text-[10px] text-teal-600 hover:text-teal-800 border border-teal-200 bg-teal-50 rounded-full px-2 py-0.5 hover:bg-teal-100 self-start"
+          >
+            + Add Note
+          </button>
+        </div>
+      </div>
+
+      {/* ── What's Next? ── */}
+      <div className="bg-teal-50 border border-teal-200 rounded-lg px-5 py-3.5 mb-4 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[12px] font-semibold text-teal-800 mb-0.5">What’s Next?</div>
+          <p className="text-[12px] text-teal-700 max-w-2xl">{whatsNext.desc}</p>
+        </div>
+        <Link
+          to={`/projects/${id}/tasks`}
+          className="shrink-0 text-[11px] font-semibold bg-teal text-navy px-3 py-1.5 rounded-md border border-teal/60 hover:bg-teal/80 transition whitespace-nowrap"
+        >
+          {whatsNext.cta} →
+        </Link>
       </div>
 
       {/* ── Baseline deadline ── */}
