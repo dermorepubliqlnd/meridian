@@ -9,6 +9,7 @@ import {
   orderBy,
   onSnapshot,
   updateDoc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { userWeeklyProjectHours } from "../../../lib/bandwidth";
@@ -61,11 +62,20 @@ function StatusPill({ label, className }) {
 
 function PlanningStatusPill({ status }) {
   const MAP = {
-    "Approved":       "bg-emerald-100 text-emerald-700",
-    "Pending Review": "bg-yellow-100  text-yellow-700",
-    "Draft":          "bg-gray-100    text-gray-600",
-    "On Hold":        "bg-orange-100  text-orange-700",
-    "Cancelled":      "bg-red-100     text-red-700",
+    // planning flow statuses
+    "Draft / Intake":   "bg-gray-100    text-gray-600",
+    "WBS Pending":      "bg-purple-100  text-purple-700",
+    "Resource Check":   "bg-orange-100  text-orange-700",
+    "Pending Approval": "bg-yellow-100  text-yellow-700",
+    "Active":           "bg-emerald-100 text-emerald-700",
+    "Done":             "bg-gray-100    text-gray-500",
+    // baseline statuses
+    "Approved":         "bg-emerald-100 text-emerald-700",
+    "Rejected":         "bg-red-100     text-red-700",
+    // legacy / misc
+    "Pending Review":   "bg-yellow-100  text-yellow-700",
+    "On Hold":          "bg-orange-100  text-orange-700",
+    "Cancelled":        "bg-red-100     text-red-700",
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${MAP[status] ?? "bg-gray-100 text-gray-500"}`}>
@@ -232,6 +242,7 @@ export default function ProjectRoleDemandPage() {
   const [planningWeeks,  setPlanningWeeks]  = useState(null);
   const [toastMsg,       setToastMsg]       = useState(null);
   const [recalcKey,      setRecalcKey]      = useState(0);
+  const [holidays,       setHolidays]       = useState([]); // [{date, type}] from workCalendar
 
   // ── Subscriptions ───────────────────────────────────────────────────────────
 
@@ -286,12 +297,33 @@ export default function ProjectRoleDemandPage() {
     });
   }, []);
 
+  // Load public + special holidays from Admin Settings
+  useEffect(() => {
+    getDoc(doc(db, "settings", "workCalendar")).then((snap) => {
+      if (snap.exists()) {
+        setHolidays((snap.data().holidays || []).filter(h => h.type !== "special_leave"));
+      }
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (project && planningWeeks === null)
       setPlanningWeeks(project.planningWeeks || projectDurationWeeks(project));
   }, [project, planningWeeks]);
 
   // ── Cross-project committed hours per user ────────────────────────────────
+
+  // Count holidays that fall within the planning window (from project start date)
+  const holidayWeeks = useMemo(() => {
+    if (!project?.startDate || !planningWeeks) return 0;
+    const start = new Date(project.startDate + "T00:00:00");
+    const end   = new Date(start);
+    end.setDate(end.getDate() + planningWeeks * 7);
+    const endStr   = end.toISOString().slice(0, 10);
+    const startStr = project.startDate;
+    const count = holidays.filter((h) => h.date >= startStr && h.date <= endStr).length;
+    return count / 5; // convert holiday days to weeks (5 working days/week)
+  }, [holidays, project, planningWeeks]);
 
   // Split committed hours into:
   //   confirmed  = baseline-approved projects (locked commitments)
@@ -350,7 +382,8 @@ export default function ProjectRoleDemandPage() {
       .map(([role, needed]) => {
         const isSME     = role.trim().toLowerCase() === "sme";
         const matched   = matchUsersToRole(users, role);
-        const totalCap   = isSME ? 0 : matched.reduce((s, u) => s + userWeeklyProjectHours(u) * planningWeeks, 0);
+        const effectiveWeeks = Math.max(0, planningWeeks - holidayWeeks);
+        const totalCap   = isSME ? 0 : matched.reduce((s, u) => s + userWeeklyProjectHours(u) * effectiveWeeks, 0);
         const confirmed  = isSME ? 0 : matched.reduce((s, u) => s + (confirmedByUser[u.id] ?? 0), 0);
         const tentative  = isSME ? 0 : matched.reduce((s, u) => s + (tentativeByUser[u.id] ?? 0), 0);
         const committed  = confirmed + tentative;
@@ -359,7 +392,7 @@ export default function ProjectRoleDemandPage() {
         const effortPct  = totalHours > 0 ? ((needed / totalHours) * 100).toFixed(1) : "0.0";
         return { role, needed, totalCap, confirmed, tentative, committed, available, gap, effortPct, isSME };
       });
-  }, [tasks, users, planningWeeks, confirmedByUser, tentativeByUser, recalcKey]);
+  }, [tasks, users, planningWeeks, holidayWeeks, confirmedByUser, tentativeByUser, recalcKey]);
 
   const totalNeeded    = roleDemand.reduce((s, r) => s + r.needed, 0);
   const totalAvailable = roleDemand.reduce((s, r) => s + r.available, 0);
@@ -572,6 +605,15 @@ export default function ProjectRoleDemandPage() {
                 <span className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Unique Roles</span>
                 <span className="text-[12px] font-bold text-[#0F2240]">{roleDemand.length}</span>
               </div>
+              {holidayWeeks > 0 && (
+                <>
+                  <div className="w-px h-4 bg-gray-200 hidden sm:block" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wide text-amber-500 font-semibold">Holidays Deducted</span>
+                    <span className="text-[12px] font-bold text-amber-600">{Math.round(holidayWeeks * 5)} days</span>
+                  </div>
+                </>
+              )}
               <div className="flex-1" />
               <Link
                 to={`/projects/${id}/resource-assignment`}

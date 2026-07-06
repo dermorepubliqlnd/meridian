@@ -9,6 +9,7 @@ import {
   onSnapshot,
   updateDoc,
   serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { userWeeklyProjectHours } from "../../../lib/bandwidth";
@@ -192,6 +193,7 @@ export default function ProjectCapacityPage() {
   const [toast, setToast] = useState(null);
   const [markingChecked, setMarkingChecked] = useState(false);
   const [allProjects, setAllProjects] = useState(null);
+  const [holidays,    setHolidays]    = useState([]);
 
   // Firestore subscriptions
   useEffect(() => {
@@ -206,6 +208,13 @@ export default function ProjectCapacityPage() {
     });
     return unsub;
   }, [id]);
+
+  // Load holidays from Admin Settings
+  useEffect(() => {
+    getDoc(doc(db, "settings", "workCalendar")).then((snap) => {
+      if (snap.exists()) setHolidays(snap.data().holidays || []);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, "projects", id, "tasks"), orderBy("order"));
@@ -289,7 +298,17 @@ export default function ProjectCapacityPage() {
 
     return assignments.filter((asgn) => asgn.userId).map((asgn) => {
       const user = users.find((u) => u.id === asgn.userId) || {};
-      const availableHrs = userWeeklyProjectHours(user) * planningWeeks;
+      // Subtract public holidays that fall within the planning window
+      const projStart = project?.startDate;
+      const holidayCount = projStart && planningWeeks
+        ? holidays.filter((h) => {
+            const end = new Date(projStart + "T00:00:00");
+            end.setDate(end.getDate() + planningWeeks * 7);
+            return h.date >= projStart && h.date <= end.toISOString().slice(0, 10);
+          }).length
+        : 0;
+      const effectiveWeeks = Math.max(0, planningWeeks - holidayCount / 5);
+      const availableHrs = userWeeklyProjectHours(user) * effectiveWeeks;
       const roleHours = hoursByRole[asgn.role] || 0;
       const allocationFactor = (asgn.allocationPct || 100) / 100;
       const hoursNeeded = roleHours * allocationFactor;

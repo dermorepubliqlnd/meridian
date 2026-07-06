@@ -404,11 +404,34 @@ export default function ProjectsPage() {
                       ? <span className="font-medium text-gray-700">{wbsEffort} hrs</span>
                       : <span className="text-[11px] text-gray-400 italic">Not set</span>}
                   </td>
-                  {/* Resource Status */}
+                  {/* Resource Status — derived from planningStatus + baselineStatus */}
                   <td className="px-3 py-3">
-                    <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500">
-                      Not Checked
-                    </span>
+                    {(() => {
+                      const ps = p.planningStatus || "Draft / Intake";
+                      const bs = p.baselineStatus  || "Not Submitted";
+                      const st = p.status          || "";
+                      let label, cls;
+                      if (st === "Done") {
+                        label = "Complete";      cls = "bg-gray-100 text-gray-500";
+                      } else if (bs === "Approved") {
+                        label = "Approved";      cls = "bg-emerald-100 text-emerald-700";
+                      } else if (bs === "Pending Approval") {
+                        label = "Awaiting Approval"; cls = "bg-yellow-100 text-yellow-700";
+                      } else if (bs === "Rejected") {
+                        label = "Rejected";      cls = "bg-red-100 text-red-700";
+                      } else if (ps === "Resource Check") {
+                        label = "Resources Set"; cls = "bg-orange-100 text-orange-700";
+                      } else if (ps === "WBS Pending") {
+                        label = "WBS Done";      cls = "bg-blue-100 text-blue-700";
+                      } else {
+                        label = "Not Started";   cls = "bg-gray-100 text-gray-400";
+                      }
+                      return (
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   {/* Requested Launch */}
                   <td className="px-3 py-3 text-gray-600">{p.targetLaunchDate || <span className="text-gray-300">—</span>}</td>
