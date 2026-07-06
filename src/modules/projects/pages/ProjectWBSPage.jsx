@@ -211,6 +211,9 @@ export default function ProjectWBSPage() {
   const [tasks, setTasks] = useState(null);
   const [toast, setToast] = useState(null);
   const [savingIds, setSavingIds] = useState(new Set());
+  const [tpsEstimates, setTpsEstimates] = useState({});
+  const [tpsOpen, setTpsOpen] = useState(false);
+  const [tpsSaving, setTpsSaving] = useState(false);
 
   // ── Firestore subscriptions ────────────────────────────────────────────────
 
@@ -283,6 +286,33 @@ export default function ProjectWBSPage() {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const showToast = useCallback((msg) => setToast(msg), []);
+
+  // ── TPS phase estimates ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (project?.tpsEstimates && Object.keys(project.tpsEstimates).length > 0) {
+      setTpsEstimates(project.tpsEstimates);
+      setTpsOpen(false);
+    } else if (project) {
+      setTpsOpen(true); // auto-open if not yet filled
+    }
+  }, [project]);
+
+  async function saveTpsEstimates(updated) {
+    setTpsSaving(true);
+    try {
+      await updateDoc(doc(db, "projects", id), { tpsEstimates: updated });
+    } catch (e) {
+      console.error("tpsEstimates save failed", e);
+    } finally {
+      setTpsSaving(false);
+    }
+  }
+
+  function getTpsForPhase(phase) {
+    // Normalize phase name → match TPS estimate key
+    const key = phase.toLowerCase().replace(/[^a-z]/g, "");
+    return tpsEstimates[key] > 0 ? tpsEstimates[key] : null;
+  }
 
   const markSaving = useCallback((taskId) => {
     setSavingIds((s) => new Set([...s, taskId]));
@@ -506,6 +536,79 @@ export default function ProjectWBSPage() {
           </div>
         </div>
 
+        {/* ── TPS Phase Hour Targets ─────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setTpsOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-3.5 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span className="text-[13px] font-semibold text-gray-800">Phase Hour Targets</span>
+              <span className="text-[11px] text-gray-400">(from TPS scoping)</span>
+              {Object.values(tpsEstimates).some((v) => v > 0) && (
+                <span className="text-[10px] bg-teal-100 text-teal-700 font-semibold px-2 py-0.5 rounded-full">Set</span>
+              )}
+            </div>
+            <svg
+              className={`w-4 h-4 text-gray-400 transition-transform ${tpsOpen ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {tpsOpen && (
+            <div className="border-t border-gray-100 px-5 py-4">
+              <p className="text-[11px] text-gray-400 mb-4">
+                Enter your TPS-scoped hour estimates per phase. These appear as targets on each phase header in the WBS below, so you can track alignment as you build out the task list.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                {[
+                  { key: "research",  label: "Research" },
+                  { key: "analysis",  label: "Analysis" },
+                  { key: "learn",     label: "Learn" },
+                  { key: "engage",    label: "Engage" },
+                  { key: "apply",     label: "Apply" },
+                  { key: "prove",     label: "Prove" },
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{label}</label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={tpsEstimates[key] || ""}
+                        onChange={(e) => {
+                          const updated = { ...tpsEstimates, [key]: parseFloat(e.target.value) || 0 };
+                          setTpsEstimates(updated);
+                        }}
+                        onBlur={(e) => {
+                          const updated = { ...tpsEstimates, [key]: parseFloat(e.target.value) || 0 };
+                          saveTpsEstimates(updated);
+                        }}
+                        placeholder="0"
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-800 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                      />
+                      <span className="text-[11px] text-gray-400">h</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-[10px] text-gray-400">
+                  Total scoped: <span className="font-semibold text-gray-600">{Object.values(tpsEstimates).reduce((s, v) => s + (v || 0), 0)}h</span>
+                </p>
+                {tpsSaving && <span className="text-[10px] text-teal-500">Saving…</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Stats bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Total Tasks" value={stats.totalTasks} sub="all tasks + subtasks" />
@@ -551,9 +654,31 @@ export default function ProjectWBSPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <span className="text-[11px] text-gray-500 font-medium">
-                        {phTotal > 0 ? `${phTotal}h` : "—"}
-                      </span>
+                      {(() => {
+                        const tpsTarget = getTpsForPhase(phase);
+                        const delta = tpsTarget !== null ? phTotal - tpsTarget : null;
+                        return (
+                          <div className="flex items-center justify-end gap-2">
+                            {tpsTarget !== null && (
+                              <span className="text-[10px] text-gray-400">
+                                TPS: {tpsTarget}h
+                              </span>
+                            )}
+                            <span className="text-[11px] text-gray-500 font-medium">
+                              {phTotal > 0 ? `${phTotal}h` : "—"}
+                            </span>
+                            {delta !== null && phTotal > 0 && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                delta > 2  ? "bg-red-100 text-red-600" :
+                                delta < -2 ? "bg-amber-100 text-amber-600" :
+                                             "bg-emerald-100 text-emerald-600"
+                              }`}>
+                                {delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)}h
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>,
 
