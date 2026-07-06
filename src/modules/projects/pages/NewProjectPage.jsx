@@ -465,48 +465,6 @@ export default function NewProjectPage() {
                 </div>
               </div>
 
-              {/* Tentative Contributors */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <h3 className="text-[13px] font-semibold text-gray-800">Tentative Contributors</h3>
-                  <span className="text-[11px] text-gray-400">(optional)</span>
-                </div>
-                <p className="text-[11px] text-gray-400 mb-3">Optional. Final resource assignment will be confirmed after WBS effort and required roles are reviewed.</p>
-
-                <div className="flex flex-wrap gap-1.5 mb-2.5">
-                  {form.ownerId && (
-                    <span className="inline-flex items-center gap-1 bg-navy/10 text-navy text-[11px] rounded-full px-2.5 py-1">
-                      {users.find((u) => u.id === form.ownerId)?.name || "Owner"}
-                      <span className="text-navy/40 text-[9px]">Owner</span>
-                    </span>
-                  )}
-                  {form.approverId && form.approverId !== form.ownerId && (
-                    <span className="inline-flex items-center gap-1 bg-navy/10 text-navy text-[11px] rounded-full px-2.5 py-1">
-                      {users.find((u) => u.id === form.approverId)?.name || "Approver"}
-                      <span className="text-navy/40 text-[9px]">Approver</span>
-                    </span>
-                  )}
-                  {form.memberIds.map((uid) => {
-                    const u = users.find((x) => x.id === uid);
-                    return u ? (
-                      <span key={uid} className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-800 text-[11px] rounded-full px-2.5 py-1">
-                        {u.name}
-                        <button type="button" onClick={() => toggleMember(uid)} className="text-teal-400 hover:text-red-400 ml-0.5 leading-none">✕</button>
-                      </span>
-                    ) : null;
-                  })}
-                </div>
-                {availableContributors.length > 0 && (
-                  <select value="" onChange={(e) => { if (e.target.value) toggleMember(e.target.value); }}
-                    className={selectCls}>
-                    <option value="">+ Add a contributor</option>
-                    {availableContributors.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
               {/* What happens next */}
               <div className="bg-blue-50 rounded-xl border border-blue-100 p-5">
                 <div className="flex items-center gap-2 mb-3">
