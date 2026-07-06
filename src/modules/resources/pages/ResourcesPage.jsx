@@ -500,6 +500,125 @@ const BAND_FILTER_OPTIONS = [
 ];
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+// ── Portfolio View — cross-project commitment per person ─────────────────────
+function PortfolioView({ people, projects, allAssignments }) {
+  const activeStatuses = ["Draft / Intake", "WBS Pending", "Resource Check", "Pending Approval", "Active"];
+  const activeProjects = projects.filter(p => activeStatuses.includes(p.planningStatus) || p.status === "Active");
+  const projectMap = Object.fromEntries(activeProjects.map(p => [p.id, p]));
+
+  // Per-person: list of {project, role, allocationPct, hoursNeeded}
+  const personData = people.map(person => {
+    const commitments = allAssignments
+      .filter(a => a.userId === person.id && projectMap[a.projectId])
+      .map(a => {
+        const proj = projectMap[a.projectId];
+        return { proj, role: a.role, allocationPct: a.allocationPct };
+      });
+
+    // Also flag if they're a Project Lead on any active project
+    const ownedProjects = activeProjects.filter(p => p.ownerId === person.id);
+
+    const weeklyPool = person.weeklyProjectHours || 0;
+    const totalCommittedHrs = commitments.reduce((s, c) => s + weeklyPool * (c.allocationPct / 100), 0);
+    const utilPct = weeklyPool > 0 ? Math.round((totalCommittedHrs / weeklyPool) * 100) : 0;
+
+    return { person, commitments, ownedProjects, weeklyPool, totalCommittedHrs, utilPct };
+  }).sort((a, b) => b.utilPct - a.utilPct);
+
+  function initials(name = "") {
+    return name.split(" ").map(w => w[0] ?? "").join("").toUpperCase().slice(0, 2);
+  }
+
+  function barColor(pct) {
+    if (pct > 100) return "bg-red-500";
+    if (pct > 85)  return "bg-amber-400";
+    if (pct > 60)  return "bg-teal-400";
+    return "bg-emerald-400";
+  }
+
+  function statusBadge(pct) {
+    if (pct > 100) return "bg-red-100 text-red-700";
+    if (pct > 85)  return "bg-amber-100 text-amber-700";
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  function statusLabel(pct) {
+    if (pct > 100) return "Overloaded";
+    if (pct > 85)  return "High Load";
+    if (pct > 0)   return "Active";
+    return "Available";
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2.5 text-[12px] text-blue-700">
+        Showing commitment across <strong>{activeProjects.length}</strong> active projects based on Resource Assignment allocations. Hours are weekly — based on each person's project capacity setting.
+      </div>
+      {personData.map(({ person, commitments, ownedProjects, weeklyPool, totalCommittedHrs, utilPct }) => (
+        <div key={person.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Person header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0" style={{ backgroundColor: "#14B8A6" }}>
+              {initials(person.name)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-gray-800 text-sm">{person.name}</span>
+                <span className="text-[11px] text-gray-400">{person.jobTitle}</span>
+                {ownedProjects.length > 0 && (
+                  <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                    👑 Leads {ownedProjects.length} project{ownedProjects.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 mt-1">
+                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${barColor(utilPct)}`} style={{ width: `${Math.min(utilPct, 100)}%` }} />
+                </div>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${statusBadge(utilPct)}`}>
+                  {statusLabel(utilPct)}
+                </span>
+                <span className="text-[11px] text-gray-500 shrink-0">
+                  {totalCommittedHrs.toFixed(1)}h / {weeklyPool}h pool · {utilPct}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Commitments */}
+          {commitments.length === 0 ? (
+            <p className="px-4 py-3 text-[12px] text-gray-400 italic">Not assigned to any active projects.</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {commitments.map((c, i) => {
+                const hrsPerWeek = weeklyPool * (c.allocationPct / 100);
+                const isOwner = c.proj.ownerId === person.id;
+                return (
+                  <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="w-1 h-8 rounded-full bg-teal-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-medium text-gray-800 truncate">{c.proj.name}</span>
+                        {c.proj.projectCode && <span className="text-[10px] text-gray-400 font-mono shrink-0">{c.proj.projectCode}</span>}
+                        {isOwner && <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">Project Lead</span>}
+                      </div>
+                      <span className="text-[11px] text-gray-400">{c.role}</span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[12px] font-semibold text-gray-700">{hrsPerWeek.toFixed(1)}h/wk</p>
+                      <p className="text-[10px] text-gray-400">{c.allocationPct}% allocation</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ResourcesPage() {
   const { user, profile } = useAuth();
   const [people,       setPeople]       = useState([]);
@@ -509,6 +628,7 @@ export default function ResourcesPage() {
   const [bandFilter,   setBandFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
   const [viewMode,     setViewMode]     = useState("grid");
+  const [allAssignments, setAllAssignments] = useState([]);
   const [windowStart,  setWindowStart]  = useState(() => startOfWeek(new Date().toISOString().slice(0, 10)));
   const [windowEnd,    setWindowEnd]    = useState(() => addDays(startOfWeek(new Date().toISOString().slice(0, 10)), 13));
 
@@ -519,10 +639,27 @@ export default function ResourcesPage() {
       setTasks(snap.docs.map(d => ({ id: d.id, projectId: d.ref.parent.parent.id, ...d.data() }))));
     const u3 = onSnapshot(collection(db, "projects"), snap =>
       setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const u4 = onSnapshot(collectionGroup(db, "assignments"), snap => {
+      const flat = [];
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const projectId = d.ref.parent.parent?.id;
+        if (!projectId) return;
+        const role = data.role || d.id;
+        if (data.assignees?.length) {
+          data.assignees.forEach(slot => {
+            if (slot.userId) flat.push({ projectId, role, userId: slot.userId, allocationPct: slot.allocationPct ?? 100 });
+          });
+        } else if (data.userId) {
+          flat.push({ projectId, role, userId: data.userId, allocationPct: data.allocationPct ?? 100 });
+        }
+      });
+      setAllAssignments(flat);
+    });
     getDoc(doc(db, "settings", "workCalendar")).then(snap => {
       if (snap.exists()) setWorkCalendar(snap.data());
     });
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u2(); u3(); u4(); };
   }, []);
 
   const isAdmin = profile?.role === "Admin";
@@ -592,8 +729,12 @@ export default function ResourcesPage() {
               ⊞ Grid
             </button>
             <button onClick={() => setViewMode("cards")}
-              className={`px-3 py-1.5 transition ${viewMode === "cards" ? "bg-navy text-white" : "hover:bg-slate-50 text-gray-600"}`}>
+              className={`px-3 py-1.5 border-r border-gray-200 transition ${viewMode === "cards" ? "bg-navy text-white" : "hover:bg-slate-50 text-gray-600"}`}>
               ▣ Cards
+            </button>
+            <button onClick={() => setViewMode("portfolio")}
+              className={`px-3 py-1.5 transition ${viewMode === "portfolio" ? "bg-navy text-white" : "hover:bg-slate-50 text-gray-600"}`}>
+              ◫ Portfolio
             </button>
           </div>
         </div>
@@ -658,6 +799,8 @@ export default function ResourcesPage() {
           dailyCapacityHours={workCalendar.dailyCapacityHours || 7.5}
           projects={projects}
         />
+      ) : viewMode === "portfolio" ? (
+        <PortfolioView people={sorted} projects={projects} allAssignments={allAssignments} />
       ) : (
         sorted.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center text-[12px] text-gray-400">

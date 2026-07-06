@@ -428,6 +428,14 @@ export default function ProjectDetailPage() {
   const [manualBaseline, setManualBaseline] = useState("");
   const [showRevisedReject, setShowRevisedReject] = useState(false);
   const [revisedRejectComment, setRevisedRejectComment] = useState("");
+  const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
+  const [changeRequestDate, setChangeRequestDate] = useState("");
+  const [changeRequestReason, setChangeRequestReason] = useState("");
+  const [submittingChangeRequest, setSubmittingChangeRequest] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completionDate, setCompletionDate] = useState("");
+  const [completionNote, setCompletionNote] = useState("");
+  const [markingComplete, setMarkingComplete] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -777,11 +785,47 @@ export default function ProjectDetailPage() {
     proposedBaseline > effectiveLockedEnd &&
     project.revisedDeadlineStatus !== "Pending Approval";
 
+  const markProjectComplete = async () => {
+    if (!completionDate) return;
+    setMarkingComplete(true);
+    try {
+      const baseline = project.approvedRevisedEndDate || project.baselineEndDate;
+      const baselineMs = baseline ? new Date(baseline + "T00:00:00").getTime() : null;
+      const actualMs = new Date(completionDate + "T00:00:00").getTime();
+      const variance = baselineMs ? Math.round((actualMs - baselineMs) / (1000 * 60 * 60 * 24)) : null;
+      await updateDoc(doc(db, "projects", id), {
+        status: "Done",
+        actualCompletionDate: completionDate,
+        completionNote: completionNote.trim() || null,
+        scheduleVarianceDays: variance,
+        completedAt: serverTimestamp(),
+      });
+      setShowCompleteModal(false);
+    } finally {
+      setMarkingComplete(false);
+    }
+  };
+
+  const openChangeRequestModal = () => {
+    setChangeRequestDate(proposedBaseline || effectiveLockedEnd || "");
+    setChangeRequestReason("");
+    setShowChangeRequestModal(true);
+  };
+
   const submitDeadlineChangeRequest = async () => {
-    await updateDoc(doc(db, "projects", id), {
-      revisedDeadlineStatus: "Pending Approval",
-      proposedRevisedEndDate: proposedBaseline,
-    });
+    if (!changeRequestDate || !changeRequestReason.trim()) return;
+    setSubmittingChangeRequest(true);
+    try {
+      await updateDoc(doc(db, "projects", id), {
+        revisedDeadlineStatus: "Pending Approval",
+        proposedRevisedEndDate: changeRequestDate,
+        proposedRevisedEndDateReason: changeRequestReason.trim(),
+        revisedDeadlineRejectionComment: null,
+      });
+      setShowChangeRequestModal(false);
+    } finally {
+      setSubmittingChangeRequest(false);
+    }
   };
   const approveDeadlineChange = async () => {
     await updateDoc(doc(db, "projects", id), {
@@ -891,6 +935,14 @@ export default function ProjectDetailPage() {
           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STAGE_BADGE_STYLES[planningStage] || "bg-gray-100 text-gray-600"}`}>
             {STAGE_DISPLAY[planningStage] || planningStage}
           </span>
+          {(isOwner || profile?.role === "Admin") && (project.status === "Active" || project.planningStatus === "Active") && project.status !== "Done" && (
+            <button
+              onClick={() => { setCompletionDate(new Date().toISOString().split("T")[0]); setCompletionNote(""); setShowCompleteModal(true); }}
+              className="text-[11px] font-medium text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-md px-3 py-1 hover:bg-emerald-100 transition"
+            >
+              ✓ Mark Complete
+            </button>
+          )}
           {(isOwner || profile?.role === "Admin") && (
             <button
               onClick={openEditProject}
@@ -1197,46 +1249,208 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      {isSlipping && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="text-[13px] text-amber-800">
-              Current task hours now compute an end date of <strong>{proposedBaseline}</strong>, past the locked baseline of{" "}
-              <strong>{effectiveLockedEnd}</strong>. Work isn't blocked — but the deadline needs a formal revision to stay accurate.
+      {/* ── Deadline slipping alert ── */}
+      {isSlipping && project.revisedDeadlineStatus !== "Pending Approval" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 mb-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[13px] font-semibold text-amber-800 mb-0.5">⚠ Schedule is slipping</p>
+            <p className="text-[12px] text-amber-700">
+              Task hours compute an end date of <strong>{proposedBaseline}</strong>, past the locked baseline of <strong>{effectiveLockedEnd}</strong>.
+              A formal revision request is needed to keep the deadline accurate.
+            </p>
+          </div>
+          {(isOwner || profile?.role === "Admin") && (
+            <button onClick={openChangeRequestModal} className="shrink-0 text-[11px] bg-amber-700 text-white px-3 py-1.5 rounded-md font-medium hover:bg-amber-800 transition-colors whitespace-nowrap">
+              Request Deadline Change
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Project Lead can always request a deadline change on active projects */}
+      {project.baselineStatus === "Approved" && !isSlipping && project.revisedDeadlineStatus !== "Pending Approval" && (isOwner || profile?.role === "Admin") && (
+        <div className="flex justify-end mb-3">
+          <button onClick={openChangeRequestModal} className="text-[11px] text-gray-500 hover:text-navy border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-md transition-colors">
+            Request Deadline Change
+          </button>
+        </div>
+      )}
+
+      {/* ── Pending approval banner ── */}
+      {project.revisedDeadlineStatus === "Pending Approval" && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[13px] font-semibold text-blue-800 mb-1">📋 Deadline change request pending</p>
+              <p className="text-[12px] text-blue-700">
+                Proposed new deadline: <strong>{project.proposedRevisedEndDate}</strong>
+              </p>
+              {project.proposedRevisedEndDateReason && (
+                <p className="text-[12px] text-blue-600 mt-1 italic">"{project.proposedRevisedEndDateReason}"</p>
+              )}
             </div>
-            {isOwner && (
-              <button onClick={submitDeadlineChangeRequest} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded-md whitespace-nowrap ml-3">
-                Request Deadline Change
+            {isApprover && !showRevisedReject && (
+              <div className="flex gap-2 shrink-0">
+                <button onClick={approveDeadlineChange} className="text-[11px] bg-teal-600 text-white font-medium px-3 py-1.5 rounded-md hover:bg-teal-700 transition-colors">Approve</button>
+                <button onClick={() => setShowRevisedReject(true)} className="text-[11px] border border-gray-300 px-3 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 transition-colors">Reject</button>
+              </div>
+            )}
+          </div>
+          {showRevisedReject && (
+            <div className="mt-3 flex gap-2">
+              <input
+                placeholder="Reason for rejection (required)"
+                value={revisedRejectComment}
+                onChange={(e) => setRevisedRejectComment(e.target.value)}
+                className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-red-300"
+              />
+              <button onClick={rejectDeadlineChange} disabled={!revisedRejectComment.trim()} className="text-[11px] bg-red-500 text-white px-3 py-1.5 rounded-md disabled:opacity-40 hover:bg-red-600 transition-colors">Confirm Reject</button>
+              <button onClick={() => setShowRevisedReject(false)} className="text-[11px] border border-gray-300 px-3 py-1.5 rounded-md text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Rejected — allow resubmit ── */}
+      {project.revisedDeadlineStatus === "Rejected" && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[13px] font-semibold text-red-700 mb-0.5">✕ Deadline change request rejected</p>
+              {project.revisedDeadlineRejectionComment && (
+                <p className="text-[12px] text-red-600 italic">"{project.revisedDeadlineRejectionComment}"</p>
+              )}
+            </div>
+            {(isOwner || profile?.role === "Admin") && (
+              <button onClick={openChangeRequestModal} className="shrink-0 text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-red-700 transition-colors whitespace-nowrap">
+                Resubmit Request
               </button>
             )}
           </div>
         </div>
       )}
 
-      {project.revisedDeadlineStatus === "Pending Approval" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="text-[13px] text-amber-800">
-              Deadline change requested: revise to <strong>{project.proposedRevisedEndDate}</strong>
-            </div>
-            {isApprover && !showRevisedReject && (
-              <div className="flex gap-2">
-                <button onClick={approveDeadlineChange} className="text-[11px] bg-teal text-navy font-medium px-3 py-1.5 rounded-md">Approve</button>
-                <button onClick={() => setShowRevisedReject(true)} className="text-[11px] border border-gray-300 px-3 py-1.5 rounded-md text-gray-600">Reject</button>
+      {/* ── Mark Project Complete Modal ── */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-base font-bold text-navy mb-1">Mark Project Complete</h2>
+            <p className="text-[12px] text-gray-500 mb-4">
+              This will lock the project and record the actual completion date. The variance against the baseline will be calculated automatically.
+            </p>
+
+            {(project.approvedRevisedEndDate || project.baselineEndDate) && (
+              <div className="bg-gray-50 rounded-lg px-3 py-2 mb-4 text-[12px] text-gray-600">
+                Baseline deadline: <strong>{project.approvedRevisedEndDate || project.baselineEndDate}</strong>
               </div>
             )}
-          </div>
-          {showRevisedReject && (
-            <div className="mt-3 flex gap-2">
-              <input placeholder="Reason for rejection" value={revisedRejectComment} onChange={(e) => setRevisedRejectComment(e.target.value)} className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-[11px]" />
-              <button onClick={rejectDeadlineChange} className="text-[11px] bg-red-500 text-white px-3 py-1.5 rounded-md">Confirm Reject</button>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Actual Completion Date <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={completionDate}
+                  onChange={(e) => setCompletionDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+                {completionDate && (project.approvedRevisedEndDate || project.baselineEndDate) && (() => {
+                  const baseline = project.approvedRevisedEndDate || project.baselineEndDate;
+                  const diff = Math.round((new Date(completionDate + "T00:00:00") - new Date(baseline + "T00:00:00")) / (1000*60*60*24));
+                  return diff === 0 ? (
+                    <p className="text-[11px] text-emerald-600 mt-1">✓ On time — delivered on baseline date</p>
+                  ) : diff < 0 ? (
+                    <p className="text-[11px] text-emerald-600 mt-1">✓ {Math.abs(diff)} day{Math.abs(diff) > 1 ? "s" : ""} early</p>
+                  ) : (
+                    <p className="text-[11px] text-red-500 mt-1">⚠ {diff} day{diff > 1 ? "s" : ""} late vs baseline</p>
+                  );
+                })()}
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Closing Note (optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={completionNote}
+                  onChange={(e) => setCompletionNote(e.target.value)}
+                  placeholder="Any notes on delivery, lessons learned, or handoff…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+              </div>
             </div>
-          )}
+
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setShowCompleteModal(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={markProjectComplete}
+                disabled={!completionDate || markingComplete}
+                className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg font-medium disabled:opacity-40 hover:bg-emerald-700 transition-colors"
+              >
+                {markingComplete ? "Saving…" : "Confirm Complete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      {project.revisedDeadlineStatus === "Rejected" && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3.5 mb-4 text-[13px] text-red-700">
-          Deadline change rejected: {project.revisedDeadlineRejectionComment}
+
+      {/* ── Deadline Change Request Modal ── */}
+      {showChangeRequestModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-base font-bold text-navy mb-1">Request Deadline Change</h2>
+            <p className="text-[12px] text-gray-500 mb-4">
+              Current locked deadline: <strong>{effectiveLockedEnd || "—"}</strong>
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Proposed New Deadline <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={changeRequestDate}
+                  min={effectiveLockedEnd || undefined}
+                  onChange={(e) => setChangeRequestDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Reason / Justification <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={changeRequestReason}
+                  onChange={(e) => setChangeRequestReason(e.target.value)}
+                  placeholder="Explain why the deadline needs to change…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5 justify-end">
+              <button
+                onClick={() => setShowChangeRequestModal(false)}
+                className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitDeadlineChangeRequest}
+                disabled={!changeRequestDate || !changeRequestReason.trim() || submittingChangeRequest}
+                className="px-4 py-2 text-sm bg-navy text-white rounded-lg font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+              >
+                {submittingChangeRequest ? "Submitting…" : "Submit Request"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
