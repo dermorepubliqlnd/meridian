@@ -7,6 +7,7 @@ import {
   query,
   orderBy,
   onSnapshot,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { userWeeklyProjectHours } from "../../../lib/bandwidth";
@@ -247,10 +248,10 @@ export default function ProjectRoleDemandPage() {
     });
   }, []);
 
-  // Auto-set planning window from project duration once project loads
+  // Seed from saved planningWeeks; fall back to project duration
   useEffect(() => {
     if (project && planningWeeks === null) {
-      setPlanningWeeks(projectDurationWeeks(project));
+      setPlanningWeeks(project.planningWeeks || projectDurationWeeks(project));
     }
   }, [project, planningWeeks]);
 
@@ -364,7 +365,11 @@ export default function ProjectRoleDemandPage() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <select
               value={planningWeeks}
-              onChange={(e) => setPlanningWeeks(Number(e.target.value))}
+              onChange={async (e) => {
+                const val = Number(e.target.value);
+                setPlanningWeeks(val);
+                await updateDoc(doc(db, "projects", id), { planningWeeks: val });
+              }}
               className="text-[12px] border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/40"
             >
               {WINDOW_OPTIONS.map((o) => (

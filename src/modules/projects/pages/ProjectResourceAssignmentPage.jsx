@@ -346,15 +346,22 @@ export default function ProjectResourceAssignmentPage() {
   const [tasks, setTasks] = useState(null);
   const [users, setUsers] = useState(null);
   const [assignments, setAssignments] = useState(null);
-  const [planningWindow, setPlanningWindow] = useState("8");
+  const [planningWindow, setPlanningWindow] = useState(null); // null = not yet loaded
   const [toast, setToast] = useState(null);
 
-  const planningWeeks = planningWeeksFromWindow(planningWindow);
+  const planningWeeks = planningWindow ? planningWeeksFromWindow(planningWindow) : 8;
 
   // ---- Firestore subscriptions ----
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "projects", id), (snap) => {
-      if (snap.exists()) setProject({ id: snap.id, ...snap.data() });
+      if (snap.exists()) {
+        const data = snap.data();
+        setProject({ id: snap.id, ...data });
+        // Seed planning window from saved value (only on first load)
+        if (planningWindow === null) {
+          setPlanningWindow(String(data.planningWeeks || 8));
+        }
+      }
     });
     return unsub;
   }, [id]);
@@ -559,8 +566,12 @@ export default function ProjectResourceAssignmentPage() {
                 Planning window
               </label>
               <select
-                value={planningWindow}
-                onChange={(e) => setPlanningWindow(e.target.value)}
+                value={planningWindow ?? "8"}
+                onChange={async (e) => {
+                  const val = e.target.value;
+                  setPlanningWindow(val);
+                  await updateDoc(doc(db, "projects", id), { planningWeeks: Number(val) });
+                }}
                 className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
               >
                 <option value="4">4 weeks</option>
@@ -633,9 +644,7 @@ export default function ProjectResourceAssignmentPage() {
                     const docId = roleDocId(role);
                     const assignment = assignments[docId] ?? null;
                     // All project team members can be assigned to any role
-                    const eligibleUsers = users.filter(
-                      (u) => project?.memberIds?.includes(u.id)
-                    );
+                    const eligibleUsers = matchUsersToRole(users, role);
 
                     return (
                       <AssignmentRow
