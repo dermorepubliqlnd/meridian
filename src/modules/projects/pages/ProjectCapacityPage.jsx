@@ -270,7 +270,11 @@ export default function ProjectCapacityPage() {
 
   // Top 3 risks (most overallocated first)
   const topRisks = useMemo(() => {
-    return [...personCapacity].sort((a, b) => a.gap - b.gap).slice(0, 3);
+    // Only show people who are actually short or tight (gap <= 5)
+    return [...personCapacity]
+      .filter((p) => p.gap <= 5)
+      .sort((a, b) => a.gap - b.gap)
+      .slice(0, 3);
   }, [personCapacity]);
 
   // Forecast dates
@@ -489,7 +493,7 @@ export default function ProjectCapacityPage() {
               <span className="font-bold text-gray-800">{totalNeeded.toFixed(1)} hrs</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-500">Total Available Capacity</span>
+              <span className="text-gray-500" title="Combined project-hours available across all assigned team members over the planning window">Team Pool ({planningWeeks}wk)</span>
               <span className="font-bold text-gray-800">{totalAvailable.toFixed(1)} hrs</span>
             </div>
             <div className="flex justify-between items-center border-t border-gray-100 pt-3">
@@ -522,10 +526,10 @@ export default function ProjectCapacityPage() {
           {/* Top Capacity Risks */}
           <div className="mt-5">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Top Capacity Risks
+              {topRisks.length === 0 ? "Team Availability" : "Capacity Risks"}
             </h3>
             {topRisks.length === 0 ? (
-              <p className="text-xs text-gray-400">No capacity risks detected.</p>
+              <p className="text-xs text-emerald-600 font-medium">✓ No risks — all assigned members have sufficient capacity.</p>
             ) : (
               <div className="space-y-2">
                 {topRisks.map((p) => {
