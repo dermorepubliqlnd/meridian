@@ -119,6 +119,8 @@ export default function NewProjectPage() {
     if (!form.deliveryFormat)     return setError("Please select a Delivery Format.");
     if (!form.ownerId)            return setError("Please assign a Project Owner.");
     if (!form.approverId)         return setError("Every project needs an Approver.");
+    if (form.startDate && form.targetLaunchDate && form.targetLaunchDate <= form.startDate)
+      return setError("Target Launch Date must be after the Start Date.");
     setSubmitting(true);
     try {
       const projectCode = await generateProjectCode();
@@ -282,12 +284,31 @@ export default function NewProjectPage() {
                   <div>
                     <Label>Start Date <Req /></Label>
                     <input type="date" className={inputCls}
-                      value={form.startDate} onChange={(e) => f("startDate", e.target.value)} required />
+                      value={form.startDate}
+                      onChange={(e) => {
+                        f("startDate", e.target.value);
+                        // Clear launch date if it's now invalid
+                        if (form.targetLaunchDate && form.targetLaunchDate <= e.target.value) {
+                          f("targetLaunchDate", "");
+                        }
+                      }}
+                      required />
                   </div>
                   <div>
                     <Label>Target Launch Date <Req /></Label>
                     <input type="date" className={inputCls}
-                      value={form.targetLaunchDate} onChange={(e) => f("targetLaunchDate", e.target.value)} />
+                      min={form.startDate ? (() => { const d = new Date(form.startDate + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })() : ""}
+                      value={form.targetLaunchDate}
+                      onChange={(e) => f("targetLaunchDate", e.target.value)} />
+                    {form.startDate && form.targetLaunchDate && form.targetLaunchDate <= form.startDate && (
+                      <p className="text-[11px] text-red-500 mt-1.5 flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                        Must be after the Start Date
+                      </p>
+                    )}
+                    {form.startDate && !form.targetLaunchDate && (
+                      <p className="text-[11px] text-gray-400 mt-1.5">Select a date after {new Date(form.startDate + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</p>
+                    )}
                   </div>
                 </div>
 
