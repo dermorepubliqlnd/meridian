@@ -134,7 +134,9 @@ function HoursInput({ value, onSave }) {
 
 function RoleSelect({ value, onChange }) {
   const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const ref = useRef(null);
+  const btnRef = useRef(null);
 
   useEffect(() => {
     function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
@@ -142,17 +144,30 @@ function RoleSelect({ value, onChange }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  function handleOpen() {
+    // Check if dropdown would be clipped at the bottom; if so, open upward
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpward(spaceBelow < 220); // dropdown is ~200px tall
+    }
+    setOpen((o) => !o);
+  }
+
   const pillClass = value
     ? "bg-teal-50 border border-teal-200 text-teal-800 text-[11px] rounded-full px-2.5 py-0.5 cursor-pointer whitespace-nowrap"
     : "border border-dashed border-gray-300 text-gray-400 text-[11px] rounded-full px-2.5 py-0.5 cursor-pointer whitespace-nowrap";
 
   return (
     <div ref={ref} className="relative inline-block">
-      <button type="button" onClick={() => setOpen((o) => !o)} className={pillClass}>
+      <button ref={btnRef} type="button" onClick={handleOpen} className={pillClass}>
         {value || "Select role"}
       </button>
       {open && (
-        <div className="absolute z-30 top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[180px] py-1 text-[12px]">
+        <div
+          className="absolute z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[180px] py-1 text-[12px]"
+          style={openUpward ? { bottom: "calc(100% + 4px)", left: 0 } : { top: "calc(100% + 4px)", left: 0 }}
+        >
           <button
             className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-400 italic"
             onClick={() => { onChange(""); setOpen(false); }}
@@ -500,7 +515,7 @@ export default function ProjectWBSPage() {
         </div>
 
         {/* WBS table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-visible">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
