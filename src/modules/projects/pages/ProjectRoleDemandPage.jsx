@@ -222,7 +222,7 @@ export default function ProjectRoleDemandPage() {
     if (!id) return;
     const q = query(
       collection(db, "projects", id, "tasks"),
-      orderBy("sortOrder", "asc")
+      orderBy("order", "asc")
     );
     return onSnapshot(q, (snap) => {
       setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
