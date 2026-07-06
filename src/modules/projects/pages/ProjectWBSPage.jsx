@@ -737,6 +737,12 @@ export default function ProjectWBSPage() {
               </svg>
               Save WBS
             </button>
+            <Link
+              to={`/projects/${id}/role-demand`}
+              className="inline-flex items-center gap-1.5 bg-teal-500 hover:bg-teal-600 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
+            >
+              View Role Demand →
+            </Link>
           </div>
         </div>
       </div>
