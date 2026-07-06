@@ -1081,7 +1081,7 @@ export default function ProjectDetailPage() {
           <p className="text-[12px] text-teal-700 max-w-2xl">{whatsNext.desc}</p>
         </div>
         <Link
-          to={`/projects/${id}/tasks`}
+          to={`/projects/${id}/wbs`}
           className="shrink-0 text-[11px] font-semibold bg-teal text-navy px-3 py-1.5 rounded-md border border-teal/60 hover:bg-teal/80 transition whitespace-nowrap"
         >
           {whatsNext.cta} →
