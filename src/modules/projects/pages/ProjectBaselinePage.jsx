@@ -392,7 +392,7 @@ export default function ProjectBaselinePage() {
       <PlanningFlowNav project={project} projectId={id} />
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-[#0F2240]">Baseline & Approval</h1>
@@ -415,7 +415,7 @@ export default function ProjectBaselinePage() {
       </div>
 
       {/* ── Baseline Status Banner ───────────────────────────────────────── */}
-      <div className="max-w-6xl mx-auto px-6 pt-5">
+      <div className="max-w-7xl mx-auto px-6 pt-5">
         {baselineStatus === "Not Submitted" && (
           <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5">
             <svg className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -463,7 +463,7 @@ export default function ProjectBaselinePage() {
       </div>
 
       {/* ── Two-column Body ──────────────────────────────────────────────── */}
-      <div className="max-w-6xl mx-auto px-6 pb-8">
+      <div className="max-w-7xl mx-auto px-6 pb-8">
         <div className="grid grid-cols-5 gap-5">
           {/* ─── Left col (3/5) ─────────────────────────────────────────── */}
           <div className="col-span-3 space-y-5">
@@ -573,6 +573,24 @@ export default function ProjectBaselinePage() {
                     <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                       <p className="text-[11px] font-semibold text-red-600 mb-0.5">Feedback from approver</p>
                       <p className="text-[12px] text-red-800">{baselineRejectionComment}</p>
+                    </div>
+                  )}
+
+                  {baselineStatus !== "Rejected" && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-3 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-blue-700 mb-2">Before submitting, confirm:</p>
+                      <div className="flex items-center gap-2 text-[11px] text-blue-800">
+                        <span className="text-emerald-600 font-bold">✓</span> WBS tasks filled in with hours
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-blue-800">
+                        <span className="text-emerald-600 font-bold">✓</span> Resources assigned to all roles
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-blue-800">
+                        <span className="text-emerald-600 font-bold">✓</span> Capacity marked as checked
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-blue-700 font-semibold border-t border-blue-200 pt-2 mt-1">
+                        <span>→</span> Then submit for approval below
+                      </div>
                     </div>
                   )}
 
@@ -800,7 +818,7 @@ export default function ProjectBaselinePage() {
 
       {/* ── Bottom Action Bar ────────────────────────────────────────────── */}
       <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link
             to={`/projects/${id}/capacity`}
             className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-gray-600 hover:text-[#0F2240] transition-colors"

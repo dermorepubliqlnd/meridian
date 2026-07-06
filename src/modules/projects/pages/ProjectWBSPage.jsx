@@ -493,6 +493,11 @@ export default function ProjectWBSPage() {
       <PlanningFlowNav project={project} projectId={id} />
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
+        {/* WBS helper banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[12px] text-blue-800">
+          <strong>WBS (Work Breakdown Structure)</strong> — List every task this project needs, estimate the hours, and assign the responsible role. This feeds the Role Demand and Capacity calculations.
+        </div>
+
         {/* Header card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">

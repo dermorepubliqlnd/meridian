@@ -765,7 +765,7 @@ export default function ProjectDetailPage() {
   };
   const approveBaseline = async () => {
     await updateDoc(doc(db, "projects", id), {
-      baselineStatus: "Locked",
+      baselineStatus: "Approved",
       baselineEndDate: project.proposedBaselineEndDate,
       baselineRejectionComment: null,
       phase: project.phase === "Scoping" ? "Planning" : project.phase,
@@ -779,7 +779,7 @@ export default function ProjectDetailPage() {
 
   const effectiveLockedEnd = project.approvedRevisedEndDate || project.baselineEndDate;
   const isSlipping =
-    project.baselineStatus === "Locked" &&
+    project.baselineStatus === "Approved" &&
     proposedBaseline &&
     effectiveLockedEnd &&
     proposedBaseline > effectiveLockedEnd &&
@@ -871,9 +871,9 @@ export default function ProjectDetailPage() {
   };
   const WHATS_NEXT = {
     "Draft / Intake":   { desc: "Confirm the estimated hours for each WBS task and select the required roles. This will allow Meridian to calculate total role demand.", cta: "Go to WBS" },
-    "WBS Pending":      { desc: "WBS hours are set. Assign the required roles to specific team members so resource capacity can be checked.", cta: "Go to WBS" },
-    "Resource Check":   { desc: "Review resource capacity gaps and resolve any conflicts before submitting the baseline for approval.", cta: "Review Capacity" },
-    "Pending Approval": { desc: "The baseline has been submitted. Waiting for the approver to review and approve the project schedule.", cta: "View Baseline" },
+    "WBS Pending":      { desc: "WBS is set. Check role demand, assign resources, then mark capacity checked before submitting the baseline.", cta: "Go to Role Demand" },
+    "Resource Check":   { desc: "Resources assigned. Mark Capacity Checked on the Capacity page to unlock baseline submission.", cta: "Go to Capacity" },
+    "Pending Approval": { desc: "Baseline submitted and awaiting approval. The Baseline Approver needs to review and approve.", cta: "View Baseline" },
     "Active":           { desc: "Project is active. Track progress in the WBS, update task statuses, and monitor health.", cta: "Go to WBS" },
     "At Risk / Behind": { desc: "This project needs attention. Review the timeline and consider requesting a deadline change or reforecasting.", cta: "Go to WBS" },
     "Done":             { desc: "Project is complete. Review the final summary and close out any remaining tasks.", cta: "View Summary" },
@@ -1133,7 +1133,14 @@ export default function ProjectDetailPage() {
           <p className="text-[12px] text-teal-700 max-w-2xl">{whatsNext.desc}</p>
         </div>
         <Link
-          to={`/projects/${id}/wbs`}
+          to={
+            planningStage === "Resource Check"   ? `/projects/${id}/capacity` :
+            planningStage === "Pending Approval" ? `/projects/${id}/baseline` :
+            planningStage === "Active"           ? `/projects/${id}/wbs` :
+            planningStage === "At Risk / Behind" ? `/projects/${id}/wbs` :
+            planningStage === "Done"             ? `/projects/${id}/baseline` :
+            `/projects/${id}/wbs`
+          }
           className="shrink-0 text-[11px] font-semibold bg-teal text-navy px-3 py-1.5 rounded-md border border-teal/60 hover:bg-teal/80 transition whitespace-nowrap"
         >
           {whatsNext.cta} →
@@ -1212,7 +1219,7 @@ export default function ProjectDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Baseline Deadline — {project.baselineStatus}</div>
-            {project.baselineStatus === "Locked" ? (
+            {project.baselineStatus === "Approved" ? (
               <div className="text-[13px] font-semibold text-navy">{project.baselineEndDate} (locked)</div>
             ) : project.baselineStatus === "Pending Approval" ? (
               <div className="text-[13px] text-amber-700">Awaiting approval — proposed date {project.proposedBaselineEndDate}</div>
@@ -1228,12 +1235,12 @@ export default function ProjectDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {isOwner && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
+            {(isOwner || profile?.role === "Admin") && (project.baselineStatus === "Not Submitted" || project.baselineStatus === "Rejected") && (
               <button onClick={submitBaseline} disabled={!proposedBaseline && !manualBaseline} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded-md disabled:opacity-40">
                 Submit Baseline for Approval
               </button>
             )}
-            {isApprover && project.baselineStatus === "Pending Approval" && !showReject && (
+            {(isApprover || profile?.role === "Admin") && project.baselineStatus === "Pending Approval" && !showReject && (
               <>
                 <button onClick={approveBaseline} className="text-[11px] bg-teal text-navy font-medium px-3 py-1.5 rounded-md">Approve</button>
                 <button onClick={() => setShowReject(true)} className="text-[11px] border border-gray-300 px-3 py-1.5 rounded-md text-gray-600">Reject</button>
@@ -1737,9 +1744,9 @@ export default function ProjectDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">
-                    Start Date{project.baselineStatus === "Locked" ? " (locked)" : ""}
+                    Start Date{project.baselineStatus === "Approved" ? " (locked)" : ""}
                   </label>
-                  <input type="date" value={settingsForm.startDate} onChange={(e) => setSettingsForm({ ...settingsForm, startDate: e.target.value })} disabled={project.baselineStatus === "Locked"} className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal ${project.baselineStatus === "Locked" ? "opacity-50 cursor-not-allowed bg-gray-50" : ""}`} />
+                  <input type="date" value={settingsForm.startDate} onChange={(e) => setSettingsForm({ ...settingsForm, startDate: e.target.value })} disabled={project.baselineStatus === "Approved"} className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-teal ${project.baselineStatus === "Approved" ? "opacity-50 cursor-not-allowed bg-gray-50" : ""}`} />
                 </div>
                 <div>
                   <label className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1 block">Target Launch Date</label>

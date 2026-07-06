@@ -12,11 +12,11 @@ const STEPS = [
 
 // Statuses that indicate each step is complete
 const STEP_DONE_STATUSES = [
-  ["WBS Pending", "Resource Check", "Pending Approval", "Active"], // WBS done
-  ["WBS Pending", "Resource Check", "Pending Approval", "Active"], // Role Demand done (informational — same gate as WBS)
-  ["Resource Check", "Pending Approval", "Active"],                // Resource Assignment done
-  ["Pending Approval", "Active"],                                  // Capacity Check done
-  ["Active"],                                                      // Baseline done
+  ["WBS Pending", "Resource Check", "Pending Approval", "Active", "Done"], // WBS
+  ["WBS Pending", "Resource Check", "Pending Approval", "Active", "Done"], // Role Demand
+  ["Resource Check", "Pending Approval", "Active", "Done"],                // Resource Assignment
+  ["Pending Approval", "Active", "Done"],                                  // Capacity Check
+  ["Active", "Done"],                                                      // Baseline
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────

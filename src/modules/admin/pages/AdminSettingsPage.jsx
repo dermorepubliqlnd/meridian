@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
 import SeedTestData from "../components/SeedTestData";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
@@ -305,6 +307,18 @@ function WorkCalendarSection() {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function AdminSettingsPage() {
+  const { profile } = useAuth();
+  const navigate    = useNavigate();
+
+  // Route guard — only Admins can access settings
+  useEffect(() => {
+    if (profile && profile.role !== "Admin") {
+      navigate("/", { replace: true });
+    }
+  }, [profile, navigate]);
+
+  if (!profile || profile.role !== "Admin") return null;
+
   return (
     <div>
       <h2 className="text-xl font-bold font-heading text-navy mb-0.5">Admin Settings</h2>

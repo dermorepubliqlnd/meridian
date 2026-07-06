@@ -662,7 +662,14 @@ export default function ProjectResourceAssignmentPage() {
       {/* ------------------------------------------------------------------ */}
       {/* Main content                                                        */}
       {/* ------------------------------------------------------------------ */}
-      <div className="px-6 py-6 max-w-screen-xl mx-auto">
+      <div className="px-6 py-6 max-w-7xl mx-auto">
+        {/* Helper text */}
+        {roleDemand.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 text-[12px] text-amber-800">
+            <strong>Assigning resources:</strong> Assign specific people to each role. Allocation % reflects how much of their weekly project hours goes to this project.
+          </div>
+        )}
+
         {roleDemand.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-10 text-center">
             <p className="text-gray-400 text-sm">
@@ -793,7 +800,7 @@ export default function ProjectResourceAssignmentPage() {
       {/* Bottom action bar                                                   */}
       {/* ------------------------------------------------------------------ */}
       <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4">
-        <div className="max-w-screen-xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link
             to={`/projects/${id}/role-demand`}
             className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-teal-600 transition-colors"

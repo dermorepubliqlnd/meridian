@@ -378,7 +378,7 @@ export default function ProjectRoleDemandPage() {
     <div className="min-h-screen bg-gray-50">
       <PlanningFlowNav project={project} projectId={id} />
 
-      <div className="px-6 py-5 max-w-6xl mx-auto space-y-5">
+      <div className="px-6 py-5 max-w-7xl mx-auto space-y-5">
 
         {toastMsg && (
           <div className="fixed top-4 right-4 z-50 bg-[#0F2240] text-white text-[12px] font-medium px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-2">
@@ -398,7 +398,10 @@ export default function ProjectRoleDemandPage() {
               <PlanningStatusPill status={project.planningStatus} />
             </div>
             <p className="text-[12px] text-gray-400 max-w-2xl leading-relaxed">
-              Capacity shown is <strong className="font-semibold text-gray-600">net available</strong> — total capacity minus hours already committed on other active projects.
+              Capacity shown is <strong className="font-semibold text-gray-600">net available</strong> — total capacity minus hours already committed on other active projects.{" "}
+              <span className="text-emerald-600 font-medium">Green = capacity is free.</span>{" "}
+              <span className="text-red-500 font-medium">Red = already locked to another approved project.</span>{" "}
+              <span className="text-amber-500 font-medium">Amber = tentatively committed but not yet approved.</span>
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

@@ -518,9 +518,9 @@ export default function ProjectCapacityPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-emerald-800">Ready to proceed to Baseline & Approval?</p>
+                <p className="text-[13px] font-semibold text-emerald-800">Ready to proceed to Baseline &amp; Approval?</p>
                 <p className="text-[12px] text-emerald-600 mt-0.5">
-                  Review the capacity data above. When you're satisfied with the resource plan, mark it checked to move to approval.
+                  Once you've reviewed the resource gaps and confirmed the team can handle this project, mark it as checked to unlock baseline submission.
                 </p>
               </div>
             </div>
