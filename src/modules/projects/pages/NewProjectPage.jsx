@@ -235,15 +235,12 @@ export default function NewProjectPage() {
                   </div>
                 </div>
 
-                {/* Row 2: SME | Description */}
-                <div className="grid grid-cols-3 gap-4 mb-4">
-
-                  <div className="col-span-2">
-                    <Label>Description <Req /></Label>
-                    <textarea className={inputCls} rows={3} required
-                      placeholder="Brief description of the project, objectives, and key deliverables..."
-                      value={form.description} onChange={(e) => f("description", e.target.value)} />
-                  </div>
+                {/* Row 2: Description — full width */}
+                <div className="mb-4">
+                  <Label>Description <Req /></Label>
+                  <textarea className={inputCls} rows={3} required
+                    placeholder="Brief description of the project, objectives, and key deliverables..."
+                    value={form.description} onChange={(e) => f("description", e.target.value)} />
                 </div>
 
                 {/* Row 3: Source | Requestor Name | Requestor Dept */}
