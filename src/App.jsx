@@ -10,6 +10,8 @@ import ProjectEditPage from "./modules/projects/pages/ProjectEditPage";
 import ProjectWBSPage from "./modules/projects/pages/ProjectWBSPage";
 import ProjectRoleDemandPage from "./modules/projects/pages/ProjectRoleDemandPage";
 import ProjectResourceAssignmentPage from "./modules/projects/pages/ProjectResourceAssignmentPage";
+import ProjectCapacityPage from "./modules/projects/pages/ProjectCapacityPage";
+import ProjectBaselinePage from "./modules/projects/pages/ProjectBaselinePage";
 import TasksPage from "./modules/tasks/pages/TasksPage";
 import ResourcesPage from "./modules/resources/pages/ResourcesPage";
 import ReportsPage from "./modules/reports/pages/ReportsPage";
@@ -36,6 +38,8 @@ export default function App() {
         <Route path="projects/:id/wbs" element={<ProjectWBSPage />} />
         <Route path="projects/:id/role-demand" element={<ProjectRoleDemandPage />} />
         <Route path="projects/:id/resource-assignment" element={<ProjectResourceAssignmentPage />} />
+        <Route path="projects/:id/capacity" element={<ProjectCapacityPage />} />
+        <Route path="projects/:id/baseline" element={<ProjectBaselinePage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="reports" element={<ReportsPage />} />
