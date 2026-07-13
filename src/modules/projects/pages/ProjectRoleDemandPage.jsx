@@ -123,8 +123,27 @@ function UtilBar({ used, total }) {
 
 // ── Team members section ──────────────────────────────────────────────────────
 
+const PCT_PRESETS = [10, 25, 50, 75, 100];
+
 function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks, assignmentsThisProject, onAssign, onRemove }) {
   const [open, setOpen] = useState(true);
+  // pendingAssign: { role, userId } — which card is showing the allocation panel
+  const [pendingAssign, setPendingAssign] = useState(null);
+  const [pendingPct, setPendingPct] = useState(25);
+
+  const openPanel = (role, userId, available, totalCap) => {
+    // Suggest a sensible default: whichever preset leaves them not overloaded
+    const weeklyHrs = totalCap / planningWeeks;
+    const defaultPct = PCT_PRESETS.find(p => (p / 100) * weeklyHrs * planningWeeks <= available) ?? 10;
+    setPendingPct(defaultPct);
+    setPendingAssign({ role, userId });
+  };
+
+  const confirmAssign = () => {
+    if (!pendingAssign) return;
+    onAssign(pendingAssign.role, pendingAssign.userId, pendingPct);
+    setPendingAssign(null);
+  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -136,7 +155,7 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
           <span className="text-[13px] font-semibold text-[#0F2240]">Team Members by Role</span>
           <span className="ml-2 text-[11px] text-gray-400">current utilization across all active projects</span>
         </div>
-        <span className="text-gray-400 text-[12px]">{open ? "v" : ">"}</span>
+        <span className="text-gray-400 text-[12px]">{open ? "▾" : "▸"}</span>
       </button>
 
       {open && (
@@ -151,7 +170,7 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                 </p>
 
                 {isSME ? (
-                  <p className="text-[12px] text-gray-400 italic">SME is external - no internal capacity tracked here.</p>
+                  <p className="text-[12px] text-gray-400 italic">SME is external — no internal capacity tracked here.</p>
                 ) : matched.length === 0 ? (
                   <p className="text-[12px] text-gray-400 italic">No team members matched for this role.</p>
                 ) : (
@@ -166,14 +185,32 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                       const sLabel = overloaded ? "Overloaded" : p >= 85 ? "Tight" : p >= 50 ? "Partial" : "Available";
                       const sCls   = overloaded
                         ? "bg-red-50 text-red-600 border-red-200"
-                        : p >= 85
-                        ? "bg-orange-50 text-orange-600 border-orange-200"
-                        : p >= 50
-                        ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                        : p >= 85 ? "bg-orange-50 text-orange-600 border-orange-200"
+                        : p >= 50 ? "bg-yellow-50 text-yellow-600 border-yellow-200"
                         : "bg-emerald-50 text-emerald-600 border-emerald-200";
 
+                      const docId      = role.replace(/\s+/g, "_");
+                      const slots      = assignmentsThisProject?.[docId]?.assignees ?? [];
+                      const assignedSlot = slots.find(s => s.userId === u.id);
+                      const isAssigned = !!assignedSlot;
+                      const isPending  = pendingAssign?.role === role && pendingAssign?.userId === u.id;
+
+                      // hrs this person would commit to this project at pendingPct
+                      const previewHrs = Math.round((pendingPct / 100) * (totalCap / planningWeeks) * planningWeeks * 10) / 10;
+                      const wouldOverload = previewHrs > available;
+
                       return (
-                        <div key={u.id} className="bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100 space-y-2">
+                        <div
+                          key={u.id}
+                          className={`rounded-lg border transition-all ${
+                            isPending
+                              ? "bg-white border-teal-300 shadow-md"
+                              : isAssigned
+                              ? "bg-teal-50/40 border-teal-200"
+                              : "bg-gray-50 border-gray-100"
+                          } px-3 py-2.5 space-y-2`}
+                        >
+                          {/* Top row: avatar + name + status + action */}
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-[#0F2240] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                               {(u.name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
@@ -185,48 +222,125 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                             <span className={`text-[9px] border rounded-full px-1.5 py-0.5 font-semibold flex-shrink-0 ${sCls}`}>
                               {sLabel}
                             </span>
-                            {(() => {
-                              const docId = role.replace(/\s+/g, "_");
-                              const slots = assignmentsThisProject?.[docId]?.assignees ?? [];
-                              const isAssigned = slots.some(s => s.userId === u.id);
-                              return isAssigned ? (
-                                <button
-                                  onClick={() => onRemove(role, u.id)}
-                                  title="Remove from project"
-                                  className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 hover:bg-red-100 border border-emerald-300 hover:border-red-300 flex items-center justify-center transition-colors group"
-                                >
-                                  <svg className="w-3 h-3 text-emerald-600 group-hover:text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" className="group-hover:hidden" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" className="hidden group-hover:block" />
-                                  </svg>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => onAssign(role, u.id)}
-                                  title="Add to project"
-                                  className="flex-shrink-0 w-6 h-6 rounded-full bg-white hover:bg-teal-50 border border-gray-300 hover:border-teal-400 flex items-center justify-center transition-colors"
-                                >
-                                  <svg className="w-3 h-3 text-gray-400 hover:text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 5v14M5 12h14" />
-                                  </svg>
-                                </button>
-                              );
-                            })()}
+                            {isAssigned ? (
+                              <button
+                                onClick={() => onRemove(role, u.id)}
+                                title="Remove from project"
+                                className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 hover:bg-red-100 border border-emerald-300 hover:border-red-300 flex items-center justify-center transition-colors group"
+                              >
+                                <svg className="w-3 h-3 text-emerald-600 group-hover:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                                <svg className="w-3 h-3 text-red-500 hidden group-hover:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+                              </button>
+                            ) : isPending ? (
+                              <button
+                                onClick={() => setPendingAssign(null)}
+                                className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 border border-gray-300 flex items-center justify-center text-gray-400 hover:bg-gray-200 transition-colors"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => openPanel(role, u.id, available, totalCap)}
+                                title="Add to project"
+                                className="flex-shrink-0 w-6 h-6 rounded-full bg-white hover:bg-teal-50 border border-gray-300 hover:border-teal-400 flex items-center justify-center transition-colors"
+                              >
+                                <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 5v14M5 12h14"/></svg>
+                              </button>
+                            )}
                           </div>
+
+                          {/* Capacity bar */}
                           <UtilBar used={committed} total={totalCap} />
                           <div className="flex justify-between text-[10px] text-gray-500">
                             <span><span className="font-semibold text-gray-700">{fmt(available)} hrs</span> free</span>
                             <span>
-                              {(confirmedByUser[u.id] ?? 0) > 0 && (
-                                <span className="font-semibold text-red-500">{fmt(confirmedByUser[u.id])} </span>
-                              )}
-                              {(tentativeByUser[u.id] ?? 0) > 0 && (
-                                <span className="font-semibold text-amber-500">+{fmt(tentativeByUser[u.id])} </span>
-                              )}
+                              {(confirmedByUser[u.id] ?? 0) > 0 && <span className="font-semibold text-red-500">{fmt(confirmedByUser[u.id])} </span>}
+                              {(tentativeByUser[u.id] ?? 0) > 0 && <span className="font-semibold text-amber-500">+{fmt(tentativeByUser[u.id])} </span>}
                               <span className="text-gray-400">committed</span>
                             </span>
                             <span className="text-gray-400">{p}% used</span>
                           </div>
+
+                          {/* Already assigned: show current allocation */}
+                          {isAssigned && (
+                            <div className="flex items-center justify-between bg-teal-50 rounded-md px-2.5 py-1.5">
+                              <span className="text-[11px] text-teal-700 font-semibold">
+                                {assignedSlot.allocationPct ?? 20}% allocated to this project
+                              </span>
+                              <span className="text-[10px] text-teal-500">
+                                ≈ {Math.round((assignedSlot.allocationPct ?? 20) / 100 * (totalCap / planningWeeks) * planningWeeks * 10) / 10} hrs
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Allocation panel — shown when pending */}
+                          {isPending && (
+                            <div className="pt-1 border-t border-teal-100 space-y-2.5">
+                              <p className="text-[11px] font-semibold text-gray-700">% of capacity for this project</p>
+
+                              {/* Quick-pick preset buttons */}
+                              <div className="flex gap-1.5 flex-wrap">
+                                {PCT_PRESETS.map(pct => {
+                                  const hrs = Math.round((pct / 100) * (totalCap / planningWeeks) * planningWeeks * 10) / 10;
+                                  const over = hrs > available;
+                                  return (
+                                    <button
+                                      key={pct}
+                                      onClick={() => setPendingPct(pct)}
+                                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
+                                        pendingPct === pct
+                                          ? over
+                                            ? "bg-red-500 text-white border-red-500"
+                                            : "bg-teal-500 text-white border-teal-500"
+                                          : over
+                                          ? "bg-red-50 text-red-500 border-red-200 hover:bg-red-100"
+                                          : "bg-white text-gray-600 border-gray-200 hover:bg-teal-50 hover:border-teal-300"
+                                      }`}
+                                    >
+                                      {pct}%
+                                    </button>
+                                  );
+                                })}
+                                {/* Custom input */}
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    min={5} max={100} step={5}
+                                    value={pendingPct}
+                                    onChange={e => setPendingPct(Math.min(100, Math.max(5, Number(e.target.value))))}
+                                    className="w-14 border border-gray-300 rounded-lg px-1.5 py-1 text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                  />
+                                  <span className="text-[11px] text-gray-400">%</span>
+                                </div>
+                              </div>
+
+                              {/* Hours preview */}
+                              <div className={`flex items-center justify-between rounded-md px-2.5 py-1.5 text-[11px] ${wouldOverload ? "bg-red-50 border border-red-200" : "bg-teal-50 border border-teal-100"}`}>
+                                <span className={wouldOverload ? "text-red-700 font-semibold" : "text-teal-700 font-semibold"}>
+                                  ≈ {previewHrs} hrs committed to this project
+                                </span>
+                                {wouldOverload && (
+                                  <span className="text-red-500">⚠ exceeds free capacity</span>
+                                )}
+                              </div>
+
+                              {/* Confirm / Cancel */}
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={confirmAssign}
+                                  className="flex-1 text-[12px] font-semibold bg-[#0F2240] text-white rounded-lg py-1.5 hover:opacity-90 transition-opacity"
+                                >
+                                  Add to project
+                                </button>
+                                <button
+                                  onClick={() => setPendingAssign(null)}
+                                  className="px-3 text-[12px] text-gray-500 border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -450,20 +564,20 @@ export default function ProjectRoleDemandPage() {
     return true;
   });
 
-  const assignUserToRole = async (role, userId) => {
+  const assignUserToRole = async (role, userId, allocationPct = 25) => {
     const docId = role.replace(/\s+/g, "_");
     const ref = doc(db, "projects", id, "assignments", docId);
     const existing = assignmentsThisProject[docId];
     if (!existing) {
       await setDoc(ref, {
         role,
-        assignees: [{ slotId: "slot-0", userId, allocationPct: 20, notes: "" }],
+        assignees: [{ slotId: "slot-0", userId, allocationPct, notes: "" }],
       });
     } else {
       const slots = existing.assignees ?? [];
       if (slots.some(s => s.userId === userId)) return;
       await updateDoc(ref, {
-        assignees: [...slots, { slotId: `slot-${Date.now()}`, userId, allocationPct: 20, notes: "" }],
+        assignees: [...slots, { slotId: `slot-${Date.now()}`, userId, allocationPct, notes: "" }],
       });
     }
   };
