@@ -345,9 +345,9 @@ export default function ProjectCapacityPage() {
 
   // Top 3 risks (most overallocated first)
   const topRisks = useMemo(() => {
-    // Only show people who are actually short or tight (gap <= 5)
+    // Only flag people who are actually overallocated (negative gap)
     return [...personCapacity]
-      .filter((p) => p.gap <= 5)
+      .filter((p) => p.gap < 0)
       .sort((a, b) => a.gap - b.gap)
       .slice(0, 3);
   }, [personCapacity]);
