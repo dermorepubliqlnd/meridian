@@ -462,7 +462,7 @@ export default function ProjectCapacityPage() {
 
   const { overallocated, limited, wbsEffortHrs, committedHrs, totalAvailable, capacityGap } = summaryStats;
   const progressPct =
-    totalAvailable > 0 ? Math.min(100, (totalNeeded / totalAvailable) * 100) : 0;
+    totalAvailable > 0 ? Math.min(100, (wbsEffortHrs / totalAvailable) * 100) : 0;
   const progressColor =
     capacityGap < 0 ? "bg-red-500" : capacityGap <= 5 ? "bg-amber-400" : "bg-emerald-500";
 
