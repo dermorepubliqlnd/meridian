@@ -958,13 +958,28 @@ export default function ProjectCapacityPage() {
       {/* ── Bottom action bar ──────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 pb-8">
         <div className="flex items-center justify-end bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
-          <Link
-            to={`/projects/${id}/baseline`}
-            className="text-sm font-semibold text-white px-5 py-2.5 rounded-lg transition hover:opacity-90"
-            style={{ backgroundColor: "#0F2240" }}
-          >
-            Proceed to Baseline &amp; Approval →
-          </Link>
+          {project.planningStatus === "Resource Check" ? (
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-amber-600 font-medium">
+                ⚠ Mark capacity as checked above before proceeding.
+              </span>
+              <button
+                disabled
+                className="text-sm font-semibold text-white px-5 py-2.5 rounded-lg opacity-40 cursor-not-allowed"
+                style={{ backgroundColor: "#0F2240" }}
+              >
+                Proceed to Baseline &amp; Approval →
+              </button>
+            </div>
+          ) : (
+            <Link
+              to={`/projects/${id}/baseline`}
+              className="text-sm font-semibold text-white px-5 py-2.5 rounded-lg transition hover:opacity-90"
+              style={{ backgroundColor: "#0F2240" }}
+            >
+              Proceed to Baseline &amp; Approval →
+            </Link>
+          )}
         </div>
       </div>
     </div>
