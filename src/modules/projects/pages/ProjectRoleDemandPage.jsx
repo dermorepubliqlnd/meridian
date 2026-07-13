@@ -9,6 +9,7 @@ import {
   orderBy,
   onSnapshot,
   updateDoc,
+  setDoc,
   getDoc,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
@@ -122,7 +123,7 @@ function UtilBar({ used, total }) {
 
 // ── Team members section ──────────────────────────────────────────────────────
 
-function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks }) {
+function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks, assignmentsThisProject, onAssign, onRemove }) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -184,6 +185,33 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                             <span className={`text-[9px] border rounded-full px-1.5 py-0.5 font-semibold flex-shrink-0 ${sCls}`}>
                               {sLabel}
                             </span>
+                            {(() => {
+                              const docId = role.replace(/\s+/g, "_");
+                              const slots = assignmentsThisProject?.[docId]?.assignees ?? [];
+                              const isAssigned = slots.some(s => s.userId === u.id);
+                              return isAssigned ? (
+                                <button
+                                  onClick={() => onRemove(role, u.id)}
+                                  title="Remove from project"
+                                  className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 hover:bg-red-100 border border-emerald-300 hover:border-red-300 flex items-center justify-center transition-colors group"
+                                >
+                                  <svg className="w-3 h-3 text-emerald-600 group-hover:text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" className="group-hover:hidden" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" className="hidden group-hover:block" />
+                                  </svg>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => onAssign(role, u.id)}
+                                  title="Add to project"
+                                  className="flex-shrink-0 w-6 h-6 rounded-full bg-white hover:bg-teal-50 border border-gray-300 hover:border-teal-400 flex items-center justify-center transition-colors"
+                                >
+                                  <svg className="w-3 h-3 text-gray-400 hover:text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 5v14M5 12h14" />
+                                  </svg>
+                                </button>
+                              );
+                            })()}
                           </div>
                           <UtilBar used={committed} total={totalCap} />
                           <div className="flex justify-between text-[10px] text-gray-500">
@@ -421,6 +449,33 @@ export default function ProjectRoleDemandPage() {
     if (assignment.userId) return false;
     return true;
   });
+
+  const assignUserToRole = async (role, userId) => {
+    const docId = role.replace(/\s+/g, "_");
+    const ref = doc(db, "projects", id, "assignments", docId);
+    const existing = assignmentsThisProject[docId];
+    if (!existing) {
+      await setDoc(ref, {
+        role,
+        assignees: [{ slotId: "slot-0", userId, allocationPct: 20, notes: "" }],
+      });
+    } else {
+      const slots = existing.assignees ?? [];
+      if (slots.some(s => s.userId === userId)) return;
+      await updateDoc(ref, {
+        assignees: [...slots, { slotId: `slot-${Date.now()}`, userId, allocationPct: 20, notes: "" }],
+      });
+    }
+  };
+
+  const removeUserFromRole = async (role, userId) => {
+    const docId = role.replace(/\s+/g, "_");
+    const ref = doc(db, "projects", id, "assignments", docId);
+    const existing = assignmentsThisProject[docId];
+    if (!existing) return;
+    const slots = (existing.assignees ?? []).filter(s => s.userId !== userId);
+    await updateDoc(ref, { assignees: slots });
+  };
 
   function showToast(msg) {
     setToastMsg(msg);
@@ -677,6 +732,9 @@ export default function ProjectRoleDemandPage() {
             confirmedByUser={confirmedByUser}
             tentativeByUser={tentativeByUser}
             planningWeeks={planningWeeks ?? 8}
+            assignmentsThisProject={assignmentsThisProject}
+            onAssign={assignUserToRole}
+            onRemove={removeUserFromRole}
           />
         )}
       </div>
