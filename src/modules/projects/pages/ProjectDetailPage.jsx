@@ -162,7 +162,7 @@ function TaskRow({
               className="w-full border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
             >
               <option value="">Unassigned</option>
-              {members.map((m) => (
+              {membersByRole(task.responsibleRole).map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
@@ -437,6 +437,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
+  const [projectAssignments, setProjectAssignments] = useState({});
   const [addingTask, setAddingTask] = useState(false);
   const [collapsedPhases, setCollapsedPhases] = useState({});
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -497,7 +498,12 @@ export default function ProjectDetailPage() {
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => { unsubProject(); unsubTasks(); unsubDCRs(); unsubUsers(); };
+    const unsubAssignments = onSnapshot(collection(db, "projects", id, "assignments"), (snap) => {
+      const map = {};
+      snap.docs.forEach((d) => { map[d.id] = d.data(); });
+      setProjectAssignments(map);
+    });
+    return () => { unsubProject(); unsubTasks(); unsubDCRs(); unsubUsers(); unsubAssignments(); };
   }, [id]);
 
   const [activityLog, setActivityLog] = useState([]);
@@ -514,7 +520,25 @@ export default function ProjectDetailPage() {
   if (!project) return <p className="text-[13px] text-gray-400 p-4">Loading project...</p>;
 
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
-  const members = users.filter((u) => project?.memberIds?.includes(u.id));
+  // Collect all user IDs assigned via Role & Team page
+  const assignedUserIds = new Set(
+    Object.values(projectAssignments).flatMap(a =>
+      (a.assignees ?? []).map(s => s.userId).filter(Boolean)
+    )
+  );
+  // members = union of memberIds + role-assigned users
+  const members = users.filter((u) =>
+    project?.memberIds?.includes(u.id) || assignedUserIds.has(u.id)
+  );
+  // For role-filtered task dropdowns: users assigned to a specific role
+  const membersByRole = (role) => {
+    if (!role) return members;
+    const docId = role.replace(/\s+/g, "_");
+    const assignment = projectAssignments[docId];
+    if (!assignment) return members.filter(u => (u.jobTitle||"") === role);
+    const ids = (assignment.assignees ?? []).map(s => s.userId).filter(Boolean);
+    return ids.length > 0 ? users.filter(u => ids.includes(u.id)) : members;
+  };
   const isApprover = project?.approverId === user?.uid;
   const isOwner = project?.ownerId === user?.uid;
 
@@ -953,7 +977,7 @@ export default function ProjectDetailPage() {
   };
   const WHATS_NEXT = {
     "Draft / Intake":   { desc: "Confirm the estimated hours for each WBS task and select the required roles. This will allow Meridian to calculate total role demand.", cta: "Go to WBS" },
-    "WBS Pending":      { desc: "WBS is set. Check role demand, assign resources, then mark capacity checked before submitting the baseline.", cta: "Go to Role Demand" },
+    "WBS Pending":      { desc: "WBS is set. Go to the Capacity Check to confirm team availability before submitting the baseline.", cta: "Go to Capacity" },
     "Resource Check":   { desc: "Resources assigned. Mark Capacity Checked on the Capacity page to unlock baseline submission.", cta: "Go to Capacity" },
     "Pending Approval": { desc: "Baseline submitted and awaiting approval. The Baseline Approver needs to review and approve.", cta: "View Baseline" },
     "Active":           { desc: "Project is active. Track progress in the WBS, update task statuses, and monitor health.", cta: "Go to WBS" },
@@ -1308,6 +1332,7 @@ export default function ProjectDetailPage() {
         </div>
         <Link
           to={
+            planningStage === "WBS Pending"     ? `/projects/${id}/capacity` :
             planningStage === "Resource Check"   ? `/projects/${id}/capacity` :
             planningStage === "Pending Approval" ? `/projects/${id}/baseline` :
             planningStage === "Active"           ? `/projects/${id}/wbs` :

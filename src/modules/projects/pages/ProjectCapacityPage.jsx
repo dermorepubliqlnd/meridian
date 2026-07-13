@@ -933,13 +933,13 @@ export default function ProjectCapacityPage() {
               icon="👥"
               title="Add Resource"
               description="Increase capacity"
-              to={`/projects/${id}/role-demand`}
+              to={`/projects/${id}/capacity`}
             />
             <ActionCard
               icon="⇄"
               title="Reassign Work"
               description="Balance workload"
-              to={`/projects/${id}/role-demand`}
+              to={`/projects/${id}/capacity`}
             />
             <ActionCard
               icon="✂️"

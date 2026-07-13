@@ -3,16 +3,14 @@ import { Link, useLocation } from "react-router-dom";
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
 const STEPS = [
-  { key: "wbs",         label: "WBS",                num: "1", path: "wbs" },
-  { key: "role-demand", label: "Role & Team",         num: "2", path: "role-demand" },
-  { key: "capacity",    label: "Capacity Check",      num: "3", path: "capacity" },
-  { key: "baseline",    label: "Baseline & Approval", num: "4", path: "baseline" },
+  { key: "wbs",      label: "WBS",                num: "1", path: "wbs"      },
+  { key: "capacity", label: "Capacity Check",      num: "2", path: "capacity" },
+  { key: "baseline", label: "Baseline & Approval", num: "3", path: "baseline" },
 ];
 
 // Statuses that indicate each step is complete
 const STEP_DONE_STATUSES = [
   ["WBS Pending", "Resource Check", "Pending Approval", "Active", "Done"], // WBS
-  ["Resource Check", "Pending Approval", "Active", "Done"],                // Role & Team
   ["Pending Approval", "Active", "Done"],                                  // Capacity Check
   ["Active", "Done"],                                                      // Baseline
 ];
@@ -47,7 +45,7 @@ export default function PlanningFlowNav({ project, projectId }) {
             <>
               <span className="text-gray-300 text-[10px]">›</span>
               <span className="text-[11px] font-semibold" style={{ color: "#14B8A6" }}>
-                {"Step " + (currentStepIdx + 1) + " of 4"}
+                {"Step " + (currentStepIdx + 1) + " of 3"}
               </span>
             </>
           )}

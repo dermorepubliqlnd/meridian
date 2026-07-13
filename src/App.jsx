@@ -8,7 +8,6 @@ import NewProjectPage from "./modules/projects/pages/NewProjectPage";
 import ProjectDetailPage from "./modules/projects/pages/ProjectDetailPage";
 import ProjectEditPage from "./modules/projects/pages/ProjectEditPage";
 import ProjectWBSPage from "./modules/projects/pages/ProjectWBSPage";
-import ProjectRoleDemandPage from "./modules/projects/pages/ProjectRoleDemandPage";
 // Resource Assignment page retired — assignments now handled in Role Demand
 import ProjectCapacityPage from "./modules/projects/pages/ProjectCapacityPage";
 import ProjectBaselinePage from "./modules/projects/pages/ProjectBaselinePage";
@@ -36,8 +35,8 @@ export default function App() {
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="projects/:id/edit" element={<ProjectEditPage />} />
         <Route path="projects/:id/wbs" element={<ProjectWBSPage />} />
-        <Route path="projects/:id/role-demand" element={<ProjectRoleDemandPage />} />
-        <Route path="projects/:id/resource-assignment" element={<Navigate to="../role-demand" replace />} />
+        <Route path="projects/:id/resource-assignment" element={<Navigate to="../capacity" replace />} />
+        <Route path="projects/:id/role-demand" element={<Navigate to="../capacity" replace />} />
         <Route path="projects/:id/capacity" element={<ProjectCapacityPage />} />
         <Route path="projects/:id/baseline" element={<ProjectBaselinePage />} />
         <Route path="tasks" element={<TasksPage />} />

@@ -13,6 +13,7 @@ import {
   setDoc,
   getDoc,
   serverTimestamp,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { userWeeklyProjectHours } from "../../../lib/bandwidth";
@@ -701,6 +702,8 @@ export default function ProjectRoleDemandPage() {
         assignees: [...slots, { slotId: `slot-${Date.now()}`, userId, allocationPct, notes: "" }],
       });
     }
+    // Ensure this person is in the project memberIds so they appear in task dropdowns
+    await updateDoc(doc(db, "projects", id), { memberIds: arrayUnion(userId) });
   };
 
   const removeUserFromRole = async (role, userId) => {

@@ -4,6 +4,7 @@ import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
   collection,
+  collectionGroup,
   query,
   orderBy,
   onSnapshot,
@@ -182,9 +183,56 @@ function RoleSelect({ value, onChange, roleOptions = [] }) {
   );
 }
 
+// ─── Availability helpers ─────────────────────────────────────────────────────
+
+const AVAIL_STYLE = {
+  available:     { dot: "bg-green-400", label: "Available",     text: "text-green-600"  },
+  limited:       { dot: "bg-amber-400", label: "Limited",       text: "text-amber-600"  },
+  overallocated: { dot: "bg-red-400",   label: "Overallocated", text: "text-red-600"    },
+};
+
+const workingDaysBetween = (start, end) => {
+  if (!start || !end) return 1;
+  const s = new Date(start), e = new Date(end);
+  let days = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) days++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return Math.max(days, 1);
+};
+
+const datesOverlap = (s1, e1, s2, e2) => s1 <= e2 && s2 <= e1;
+
+const getAvailability = (userId, taskStartDate, taskEndDate, taskHours, allUsers, globalWorkload, currentTaskId) => {
+  if (!taskStartDate || !taskHours) return null;
+  const endDate = taskEndDate || taskStartDate;
+  const user = allUsers.find(u => u.id === userId);
+  if (!user) return null;
+
+  const weeklyAvail = (user.weeklyHours || 37.5) * ((user.projectCapacityPct || 60) / 100);
+  const numWeeks = workingDaysBetween(taskStartDate, endDate) / 5;
+  const totalAvailHrs = weeklyAvail * numWeeks;
+
+  // Sum ALL assigned tasks overlapping this date range, excluding the task being assigned
+  const existing = (globalWorkload[userId] || []).filter(t =>
+    t.taskId !== currentTaskId &&
+    datesOverlap(taskStartDate, endDate, t.startDate, t.endDate || t.startDate)
+  );
+  const existingHrs = existing.reduce((acc, t) => acc + t.estimatedHours, 0);
+  const remainingHrs = totalAvailHrs - existingHrs;
+  const utilizationAfter = totalAvailHrs > 0 ? (existingHrs + taskHours) / totalAvailHrs : 1;
+
+  if (utilizationAfter > 1) return { status: "overallocated", existingHrs, totalAvailHrs, remainingHrs };
+  if (utilizationAfter > 0.8) return { status: "limited", existingHrs, totalAvailHrs, remainingHrs };
+  return { status: "available", existingHrs, totalAvailHrs, remainingHrs };
+};
+
 // ─── Assignee select ──────────────────────────────────────────────────────────
 
-function AssigneeSelect({ value, responsibleRole, assignmentsByRole, allUsers, onChange }) {
+function AssigneeSelect({ value, responsibleRole, assignmentsByRole, allUsers, globalWorkload, taskStartDate, taskEndDate, taskHours, currentTaskId, onChange }) {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
   const ref = useRef(null);
@@ -236,8 +284,16 @@ function AssigneeSelect({ value, responsibleRole, assignmentsByRole, allUsers, o
     );
   }
 
-  if (assignedUsers.length === 0) {
-    return <span className="text-[11px] text-gray-300 italic">No one assigned</span>;
+  // Fall back to users whose jobTitle matches the role when no Role & Team assignment exists yet
+  const fallbackUsers = assignedUsers.length > 0 ? assignedUsers : allUsers.filter(u => {
+    const jt = (u.jobTitle || "").toLowerCase();
+    const role = (responsibleRole || "").toLowerCase();
+    return jt === role || jt.includes(role) || role.includes(jt);
+  });
+  const candidateUsers = fallbackUsers.length > 0 ? fallbackUsers : allUsers;
+
+  if (candidateUsers.length === 0) {
+    return <span className="text-[11px] text-gray-300 italic">No users found</span>;
   }
 
   const pillClass = selectedUser
@@ -269,8 +325,10 @@ function AssigneeSelect({ value, responsibleRole, assignmentsByRole, allUsers, o
           >
             Unassign
           </button>
-          {assignedUsers.map((u) => {
+          {candidateUsers.map((u) => {
             const name = u.displayName || u.name || u.email || u.id;
+            const avail = getAvailability(u.id, taskStartDate, taskEndDate, taskHours || 0, allUsers, globalWorkload || {}, currentTaskId);
+            const style = avail ? AVAIL_STYLE[avail.status] : null;
             return (
               <button
                 key={u.id}
@@ -280,10 +338,21 @@ function AssigneeSelect({ value, responsibleRole, assignmentsByRole, allUsers, o
                 <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                   {name[0].toUpperCase()}
                 </span>
-                <div>
-                  <div>{name}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">{name}</div>
                   {u.jobTitle && <div className="text-[10px] text-gray-400">{u.jobTitle}</div>}
                 </div>
+                {style && (
+                  <span className={`flex items-center gap-1 text-[10px] font-medium ${style.text} flex-shrink-0`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                    {style.label}
+                    {avail.totalAvailHrs > 0 && (
+                      <span className="text-gray-400 font-normal">
+                        ({Math.round(Math.max(0, avail.remainingHrs - (taskHours||0)))}h left)
+                      </span>
+                    )}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -322,12 +391,13 @@ export default function ProjectWBSPage() {
   const roleOptions = [...new Set([...jobTitles, ...FIXED_ROLE_EXTRAS])].sort();
   const { user, profile } = useAuth();
 
-  const locked = (project?.planningStatus === "Pending Approval");
-
   const [project, setProject] = useState(undefined);
   const [tasks, setTasks] = useState(null);
   const [users, setUsers] = useState([]);
+  const [globalWorkload, setGlobalWorkload] = useState({}); // userId -> [{startDate,endDate,estimatedHours,projectId,taskId}]
   const [assignmentsByRole, setAssignmentsByRole] = useState({});
+
+  const locked = project?.planningStatus === "Pending Approval";
   const [toast, setToast] = useState(null);
   const [savingIds, setSavingIds] = useState(new Set());
   const [tpsEstimates, setTpsEstimates] = useState({});
@@ -357,6 +427,27 @@ export default function ProjectWBSPage() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+
+  // Cross-project workload index — all assigned tasks across all active projects
+  useEffect(() => {
+    const unsub = onSnapshot(collectionGroup(db, "tasks"), (snap) => {
+      const map = {};
+      snap.docs.forEach((d) => {
+        const t = d.data();
+        if (!t.assigneeId || !t.startDate || !t.estimatedHours) return;
+        if (!map[t.assigneeId]) map[t.assigneeId] = [];
+        map[t.assigneeId].push({
+          startDate: t.startDate,
+          endDate: t.endDate || t.startDate,
+          estimatedHours: Number(t.estimatedHours) || 0,
+          projectId: d.ref.parent.parent?.id,
+          taskId: d.id,
+        });
+      });
+      setGlobalWorkload(map);
     });
     return unsub;
   }, []);
@@ -805,6 +896,8 @@ export default function ProjectWBSPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-24">Est. Hours</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-44">Required Role</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-44">Assigned To</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-32">Start Date</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-32">End Date</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide">Notes</th>
                 <th className="w-10 px-2 py-3" />
               </tr>
@@ -812,7 +905,7 @@ export default function ProjectWBSPage() {
             <tbody>
               {phases.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400 text-[13px]">
+                  <td colSpan={9} className="text-center py-12 text-gray-400 text-[13px]">
                     No tasks yet. Click <span className="font-semibold text-teal-600">+ Add Task</span> to get started.
                   </td>
                 </tr>
@@ -827,7 +920,7 @@ export default function ProjectWBSPage() {
                 return [
                   /* Phase group header */
                   <tr key={`phase-${phase}`} className="bg-slate-50 border-b border-gray-100" style={{ borderLeft: "4px solid #14B8A6" }}>
-                    <td colSpan={6} className="px-4 py-2">
+                    <td colSpan={9} className="px-4 py-2">
                       <span className="font-semibold text-gray-700 text-[12px] uppercase tracking-wide">
                         {phase}
                       </span>
@@ -912,7 +1005,30 @@ export default function ProjectWBSPage() {
                             responsibleRole={task.responsibleRole || ""}
                             assignmentsByRole={assignmentsByRole}
                             allUsers={users}
+                            globalWorkload={globalWorkload}
+                            taskStartDate={task.startDate}
+                            taskEndDate={task.endDate}
+                            taskHours={task.estimatedHours}
+                            currentTaskId={task.id}
                             onChange={(v) => saveTaskField(task.id, { assigneeId: v })}
+                          />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="date"
+                            value={task.startDate || ""}
+                            onChange={(e) => saveTaskField(task.id, { startDate: e.target.value || null })}
+                            disabled={locked}
+                            className="text-[12px] text-gray-700 border border-gray-200 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-teal-400 disabled:opacity-40"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="date"
+                            value={task.endDate || ""}
+                            onChange={(e) => saveTaskField(task.id, { endDate: e.target.value || null })}
+                            disabled={locked}
+                            className="text-[12px] text-gray-700 border border-gray-200 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-teal-400 disabled:opacity-40"
                           />
                         </td>
                         <td className="px-4 py-2.5 text-gray-500 max-w-[180px]">
@@ -973,7 +1089,30 @@ export default function ProjectWBSPage() {
                               responsibleRole={sub.responsibleRole || ""}
                               assignmentsByRole={assignmentsByRole}
                               allUsers={users}
+                              globalWorkload={globalWorkload}
+                              taskStartDate={sub.startDate}
+                              taskEndDate={sub.endDate}
+                              taskHours={sub.estimatedHours}
+                              currentTaskId={sub.id}
                               onChange={(v) => saveTaskField(sub.id, { assigneeId: v })}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="date"
+                              value={sub.startDate || ""}
+                              onChange={(e) => saveTaskField(sub.id, { startDate: e.target.value || null })}
+                              disabled={locked}
+                              className="text-[12px] text-gray-700 border border-gray-200 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-teal-400 disabled:opacity-40"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="date"
+                              value={sub.endDate || ""}
+                              onChange={(e) => saveTaskField(sub.id, { endDate: e.target.value || null })}
+                              disabled={locked}
+                              className="text-[12px] text-gray-700 border border-gray-200 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-teal-400 disabled:opacity-40"
                             />
                           </td>
                           <td className="px-4 py-2 text-gray-400 max-w-[180px]">
@@ -1003,7 +1142,7 @@ export default function ProjectWBSPage() {
 
                   /* Add task row for this phase */
                   <tr key={`add-${phase}`} className="border-b border-gray-100">
-                    <td colSpan={7} className="px-4 py-2">
+                    <td colSpan={9} className="px-4 py-2">
                       <button
                         onClick={() => addTask(phase)}
                         className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-teal-600 transition-colors"
@@ -1071,7 +1210,7 @@ export default function ProjectWBSPage() {
               Save WBS
             </button>
             <Link
-              to={`/projects/${id}/role-demand`}
+              to={`/projects/${id}/capacity`}
               className="inline-flex items-center gap-1.5 bg-teal-500 hover:bg-teal-600 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
             >
               View Role Demand →
