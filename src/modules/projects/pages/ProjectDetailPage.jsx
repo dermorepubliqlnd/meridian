@@ -23,7 +23,7 @@ import { phaseColor, STATUS_PILL_STYLES } from "../../../lib/taskColors";
 import { computeHealth, PROJECT_STATUSES, PROJECT_PHASES, STATUS_STYLES, PHASE_STYLES, migrateLegacyStatus } from "../../../lib/health";
 import { useSettingsList } from "../../../lib/useSettingsList";
 
-const STATUSES = ["Not Started", "In Progress", "Blocked", "Done"];
+const STATUSES = ["Not Started", "In Progress", "Blocked", "Ready for Completion", "Done"];
 
 function ProgressBar({ pct }) {
   const rounded = Math.round(pct);
@@ -41,7 +41,8 @@ function derivedStatus(children) {
   if (children.length === 0) return "Not Started";
   if (children.some((c) => c.status === "Blocked")) return "Blocked";
   if (children.every((c) => c.status === "Done")) return "Done";
-  if (children.some((c) => c.status === "Done" || c.status === "In Progress")) return "In Progress";
+  if (children.every((c) => c.status === "Done" || c.status === "Ready for Completion")) return "Ready for Completion";
+  if (children.some((c) => c.status === "Done" || c.status === "In Progress" || c.status === "Ready for Completion")) return "In Progress";
   return "Not Started";
 }
 
@@ -57,6 +58,7 @@ function TaskRow({
   onContextMenuRow,
   addingSubtaskFor, onCommitSubtask,
   today, expandedNotes, onToggleNote, onSaveNote, onOpenNote,
+  onRequestDCR,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -212,7 +214,24 @@ function TaskRow({
           )}
         </td>
         <td className="px-3 py-1.5 text-gray-500 text-[11px]">
-          {depth === 0 ? task.dueDate || "—" : "—"}
+          {depth === 0 ? (
+            <div className="flex items-center gap-1 group/date">
+              <span className={task.dueDate && task.dueDate < today && task.status !== "Done" ? "text-red-600 font-semibold" : ""}>
+                {task.dueDate || "—"}
+              </span>
+              {task.dueDate && task.status !== "Done" && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRequestDCR && onRequestDCR(task); }}
+                  className="opacity-0 group-hover/date:opacity-100 transition-opacity ml-1 text-gray-400 hover:text-indigo-600"
+                  title="Request deadline change"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          ) : "—"}
         </td>
         <td className="px-3 py-1.5">
           <input
@@ -431,6 +450,14 @@ export default function ProjectDetailPage() {
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
   const [changeRequestDate, setChangeRequestDate] = useState("");
   const [changeRequestReason, setChangeRequestReason] = useState("");
+  // Task-level DCR (Deadline Change Request)
+  const [showDCRModal, setShowDCRModal]               = useState(false);
+  const [dcrTask, setDcrTask]                         = useState(null);
+  const [dcrRequestedDate, setDcrRequestedDate]       = useState("");
+  const [dcrReason, setDcrReason]                     = useState("");
+  const [submittingDCR, setSubmittingDCR]             = useState(false);
+  const [dcrs, setDcrs]                               = useState([]);
+  const [approvingDCR, setApprovingDCR]               = useState(null);
   const [submittingChangeRequest, setSubmittingChangeRequest] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completionDate, setCompletionDate] = useState("");
@@ -464,10 +491,13 @@ export default function ProjectDetailPage() {
       query(collection(db, "projects", id, "tasks"), orderBy("order")),
       (snap) => setTasks(snap.docs.map((d) => ({ id: d.id, parentTaskId: null, ...d.data() })))
     );
+    const unsubDCRs = onSnapshot(collection(db, "projects", id, "deadlineChangeRequests"), (snap) => {
+      setDcrs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => { unsubProject(); unsubTasks(); unsubUsers(); };
+    return () => { unsubProject(); unsubTasks(); unsubDCRs(); unsubUsers(); };
   }, [id]);
 
   const [activityLog, setActivityLog] = useState([]);
@@ -827,6 +857,58 @@ export default function ProjectDetailPage() {
       setSubmittingChangeRequest(false);
     }
   };
+  const submitDCR = async () => {
+    if (!dcrTask || !dcrRequestedDate || !dcrReason.trim()) return;
+    setSubmittingDCR(true);
+    try {
+      await addDoc(collection(db, "projects", id, "deadlineChangeRequests"), {
+        taskId: dcrTask.id,
+        taskName: dcrTask.name,
+        requestedBy: user.uid,
+        requestedByName: profile?.name || user.displayName || user.email,
+        currentDueDate: dcrTask.dueDate || null,
+        requestedDueDate: dcrRequestedDate,
+        reason: dcrReason.trim(),
+        status: "Pending",
+        createdAt: serverTimestamp(),
+        reviewedBy: null,
+        reviewedAt: null,
+        reviewNote: null,
+      });
+      setShowDCRModal(false);
+      setDcrTask(null);
+      setDcrRequestedDate("");
+      setDcrReason("");
+    } catch (e) {
+      console.error("submitDCR error", e);
+    } finally {
+      setSubmittingDCR(false);
+    }
+  };
+
+  const approveDCR = async (dcr, approved, note = "") => {
+    setApprovingDCR(dcr.id);
+    try {
+      const dcrRef = doc(db, "projects", id, "deadlineChangeRequests", dcr.id);
+      await updateDoc(dcrRef, {
+        status: approved ? "Approved" : "Rejected",
+        reviewedBy: user.uid,
+        reviewedByName: profile?.name || user.displayName || user.email,
+        reviewedAt: serverTimestamp(),
+        reviewNote: note || null,
+      });
+      if (approved && dcr.taskId && dcr.requestedDueDate) {
+        await updateDoc(doc(db, "projects", id, "tasks", dcr.taskId), {
+          dueDate: dcr.requestedDueDate,
+        });
+      }
+    } catch (e) {
+      console.error("approveDCR error", e);
+    } finally {
+      setApprovingDCR(null);
+    }
+  };
+
   const approveDeadlineChange = async () => {
     await updateDoc(doc(db, "projects", id), {
       revisedDeadlineStatus: null,
@@ -1126,6 +1208,98 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
+      {/* ── Execution Health Card (Active projects only) ── */}
+      {project.status === "Active" && health && (
+        <div className={`rounded-xl border mb-4 px-5 py-4 ${
+          health.rag === "red"   ? "bg-red-50 border-red-200" :
+          health.rag === "amber" ? "bg-amber-50 border-amber-200" :
+          health.rag === "green" ? "bg-emerald-50 border-emerald-200" :
+                                    "bg-gray-50 border-gray-200"
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                health.rag === "red" ? "bg-red-500" : health.rag === "amber" ? "bg-amber-500" : health.rag === "green" ? "bg-emerald-500" : "bg-gray-400"
+              }`} />
+              <span className={`text-[13px] font-bold ${
+                health.rag === "red" ? "text-red-800" : health.rag === "amber" ? "text-amber-800" : health.rag === "green" ? "text-emerald-800" : "text-gray-700"
+              }`}>
+                {health.label}
+              </span>
+              {health.isOverridden && <span className="text-[10px] bg-white border rounded-full px-1.5 py-0.5 text-gray-500">Manual override</span>}
+            </div>
+            <span className="text-[11px] text-gray-400">Execution health</span>
+          </div>
+          <div className="grid grid-cols-4 gap-4">
+            {/* Overall Progress */}
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Progress</div>
+              <div className="flex items-end gap-1 mb-1">
+                <span className="text-[22px] font-bold text-navy leading-none">{Math.round(projectCompletion)}</span>
+                <span className="text-[13px] text-gray-500 mb-0.5">%</span>
+              </div>
+              <div className="w-full bg-white/60 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${health.rag === "green" ? "bg-emerald-500" : health.rag === "amber" ? "bg-amber-500" : "bg-red-500"}`}
+                  style={{ width: `${Math.round(projectCompletion)}%` }}
+                />
+              </div>
+            </div>
+            {/* Overdue Tasks */}
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Overdue Tasks</div>
+              <div className="flex items-end gap-1">
+                <span className={`text-[22px] font-bold leading-none ${overdueTasks.length > 0 ? "text-red-600" : "text-navy"}`}>
+                  {overdueTasks.length}
+                </span>
+                <span className="text-[13px] text-gray-500 mb-0.5">tasks</span>
+              </div>
+              {overdueTasks.length > 0 && (
+                <p className="text-[10px] text-red-500 mt-0.5">Need attention</p>
+              )}
+            </div>
+            {/* Days Remaining */}
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Days Remaining</div>
+              {(() => {
+                const end = project.approvedRevisedEndDate || project.baselineEndDate || project.targetLaunchDate;
+                if (!end) return <span className="text-[13px] text-gray-400">—</span>;
+                const diff = Math.ceil((new Date(end + "T00:00:00") - new Date()) / 86400000);
+                return (
+                  <>
+                    <div className="flex items-end gap-1">
+                      <span className={`text-[22px] font-bold leading-none ${diff < 0 ? "text-red-600" : diff <= 7 ? "text-amber-600" : "text-navy"}`}>
+                        {Math.abs(diff)}
+                      </span>
+                      <span className="text-[13px] text-gray-500 mb-0.5">{diff < 0 ? "overdue" : "left"}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Deadline: {end}</p>
+                  </>
+                );
+              })()}
+            </div>
+            {/* Total Tasks */}
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Task Status</div>
+              {(() => {
+                const done = tasks.filter(t => t.status === "Done").length;
+                const rfc  = tasks.filter(t => t.status === "Ready for Completion").length;
+                const total = tasks.length;
+                return (
+                  <>
+                    <div className="flex items-end gap-1">
+                      <span className="text-[22px] font-bold text-navy leading-none">{done}</span>
+                      <span className="text-[13px] text-gray-500 mb-0.5">/{total}</span>
+                    </div>
+                    {rfc > 0 && <p className="text-[10px] text-purple-600 mt-0.5">{rfc} ready to close</p>}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── What's Next? ── */}
       <div className="bg-teal-50 border border-teal-200 rounded-lg px-5 py-3.5 mb-4 flex items-start justify-between gap-4">
         <div>
@@ -1405,6 +1579,62 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* ── Task DCR submission modal ── */}
+      {showDCRModal && dcrTask && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-navy font-heading">Request Deadline Change</h3>
+              <button onClick={() => setShowDCRModal(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Task</label>
+                <p className="text-[13px] text-navy font-medium">{dcrTask.name}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Current Due Date</label>
+                  <p className="text-[13px] text-gray-600">{dcrTask.dueDate || "—"}</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Requested New Date <span className="text-red-400">*</span></label>
+                  <input
+                    type="date"
+                    value={dcrRequestedDate}
+                    min={today}
+                    onChange={(e) => setDcrRequestedDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Reason <span className="text-red-400">*</span></label>
+                <textarea
+                  rows={3}
+                  value={dcrReason}
+                  onChange={(e) => setDcrReason(e.target.value)}
+                  placeholder="Explain why the deadline needs to change and what the impact is…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setShowDCRModal(false)} className="px-4 py-2 text-[13px] border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                onClick={submitDCR}
+                disabled={!dcrRequestedDate || !dcrReason.trim() || submittingDCR}
+                className="px-4 py-2 text-[13px] bg-indigo-600 text-white rounded-lg font-semibold disabled:opacity-40 hover:bg-indigo-700 transition"
+              >
+                {submittingDCR ? "Submitting…" : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Deadline Change Request Modal ── */}
       {showChangeRequestModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -1487,6 +1717,51 @@ export default function ProjectDetailPage() {
         </div>
       ) : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+        {/* ── DCR Approval Queue (visible only to dueDateApproverId) ── */}
+        {dcrs.filter(d => d.status === "Pending").length > 0 && project.dueDateApproverId === user?.uid && (
+          <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-bold text-indigo-800">Pending Deadline Change Requests</span>
+                <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full px-2 py-0.5">
+                  {dcrs.filter(d => d.status === "Pending").length}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {dcrs.filter(d => d.status === "Pending").map((dcr) => (
+                <div key={dcr.id} className="bg-white rounded-lg border border-indigo-200 px-3 py-2.5 flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-semibold text-navy truncate">{dcr.taskName}</p>
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
+                      <span>Current: <span className="font-medium text-gray-700">{dcr.currentDueDate || "—"}</span></span>
+                      <span>→</span>
+                      <span>Requested: <span className="font-medium text-indigo-700">{dcr.requestedDueDate}</span></span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1 italic">"{dcr.reason}"</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Requested by {dcr.requestedByName || "team member"}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => approveDCR(dcr, true)}
+                      disabled={approvingDCR === dcr.id}
+                      className="text-[11px] font-semibold bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-emerald-700 disabled:opacity-40 transition"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => approveDCR(dcr, false)}
+                      disabled={approvingDCR === dcr.id}
+                      className="text-[11px] font-semibold bg-white border border-red-300 text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 disabled:opacity-40 transition"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-[13px] font-semibold text-navy font-heading">Task List — {project.workTypeName}</h3>
           <button onClick={() => setAddingTask(true)} className="text-[11px] text-navy underline">+ Add Task</button>
@@ -1591,6 +1866,7 @@ export default function ProjectDetailPage() {
                         })}
                         onSaveNote={(task, val) => updateDoc(doc(db, "projects", id, "tasks", task.id), { notes: val.trim() || null })}
                         onOpenNote={(task) => setNotePanel({ taskId: task.id, taskName: task.name, note: task.notes || "" })}
+                        onRequestDCR={(task) => { setDcrTask(task); setDcrRequestedDate(task.dueDate || ""); setDcrReason(""); setShowDCRModal(true); }}
                       />
                     ))}
                 </Fragment>

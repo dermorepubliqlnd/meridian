@@ -12,6 +12,7 @@ export const STATUS_STYLES = {
   "Not Started": "bg-gray-50 border-gray-300 text-gray-600",
   "In Progress": "bg-blue-50 border-blue-400 text-blue-700",
   Blocked: "bg-rose-50 border-rose-400 text-rose-700",
+  "Ready for Completion": "bg-purple-50 border-purple-400 text-purple-700",
   Done: "bg-emerald-50 border-emerald-400 text-emerald-700",
 };
 
@@ -21,6 +22,7 @@ export const STATUS_PILL_STYLES = {
   "Not Started": "bg-gray-100 text-gray-600",
   "In Progress": "bg-blue-100 text-blue-700",
   Blocked: "bg-rose-100 text-rose-700",
+  "Ready for Completion": "bg-purple-100 text-purple-700",
   Done: "bg-emerald-100 text-emerald-700",
 };
 
