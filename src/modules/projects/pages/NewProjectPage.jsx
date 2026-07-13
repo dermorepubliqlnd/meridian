@@ -152,6 +152,7 @@ export default function NewProjectPage() {
         revisedDeadlineRejectionComment: null, actualCompletionDate: null,
         ownerId:    form.ownerId,
         approverId: form.approverId,
+        dueDateApproverId: form.ownerId,  // defaults to project owner; can be changed in project settings
         memberIds:  Array.from(new Set([...form.memberIds, form.ownerId, form.approverId])),
         folderUrl:  form.folderUrl  || null,
         smeName:    form.smeName    || null,
@@ -186,6 +187,10 @@ export default function NewProjectPage() {
 
   const availableContributors = users.filter(
     (u) => u.role !== "Exec Viewer" && u.id !== form.ownerId && u.id !== form.approverId && !form.memberIds.includes(u.id)
+  );
+
+  const approverEligibleUsers = users.filter(
+    (u) => u.id !== form.ownerId && /supervisor|manager|director/i.test(u.jobTitle || "")
   );
 
   return (
@@ -447,9 +452,15 @@ export default function NewProjectPage() {
                     <select className={selectCls} value={form.approverId}
                       onChange={(e) => f("approverId", e.target.value)} required>
                       <option value="">Select baseline approver</option>
-                      {users.filter((u) => u.id !== form.ownerId).map((u) => <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}</option>)}
+                      {approverEligibleUsers.length === 0 ? (
+                        <option value="" disabled>No eligible users (need Supervisor/Manager/Director)</option>
+                      ) : (
+                        approverEligibleUsers.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}</option>
+                        ))
+                      )}
                     </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Baseline Approver signs off on the baseline deadline and deadline change requests. Must be a different person from the Project Lead.</p>
+                    <p className="text-[11px] text-gray-400 mt-1">Must be a Supervisor, Manager, or Director. Cannot be the same person as the Project Lead.</p>
                     {form.approverId && form.approverId === form.ownerId && (
                       <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>

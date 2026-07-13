@@ -306,6 +306,17 @@ export default function ProjectRoleDemandPage() {
     }).catch(() => {});
   }, []);
 
+  const [assignmentsThisProject, setAssignmentsThisProject] = useState({});
+
+  useEffect(() => {
+    if (!id) return;
+    return onSnapshot(collection(db, "projects", id, "assignments"), (snap) => {
+      const map = {};
+      snap.docs.forEach((d) => { map[d.id] = d.data(); });
+      setAssignmentsThisProject(map);
+    });
+  }, [id]);
+
   useEffect(() => {
     if (project && planningWeeks === null)
       setPlanningWeeks(project.planningWeeks || projectDurationWeeks(project));
@@ -400,6 +411,17 @@ export default function ProjectRoleDemandPage() {
   const hasRoles       = roleDemand.length > 0;
   const gapRoles       = roleDemand.filter((r) => r.gap < 0 && !r.isSME);
 
+  // Roles that have demand but no person assigned yet in Resource Assignment
+  const rolesNeedingAssignment = roleDemand.filter(r => {
+    if (r.isSME) return false;
+    const docId = r.role.replace(/\s+/g, "_");
+    const assignment = assignmentsThisProject[docId];
+    if (!assignment) return true;
+    if (Array.isArray(assignment.assignees) && assignment.assignees.length > 0) return false;
+    if (assignment.userId) return false;
+    return true;
+  });
+
   function showToast(msg) {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
@@ -480,6 +502,27 @@ export default function ProjectRoleDemandPage() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {hasRoles && rolesNeedingAssignment.length > 0 && (
+          <div className="flex items-start justify-between gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              <svg className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <p className="text-[12px] text-indigo-800">
+                <span className="font-semibold">{rolesNeedingAssignment.length} role{rolesNeedingAssignment.length > 1 ? "s" : ""} still need people assigned:</span>{" "}
+                {rolesNeedingAssignment.map(r => r.role).join(", ")}.{" "}
+                Go to Resource Assignment to assign team members to these roles.
+              </p>
+            </div>
+            <Link
+              to={`/projects/${id}/resource-assignment`}
+              className="flex-shrink-0 inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            >
+              Assign People →
+            </Link>
           </div>
         )}
 

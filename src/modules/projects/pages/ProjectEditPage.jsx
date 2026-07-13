@@ -58,6 +58,7 @@ export default function ProjectEditPage() {
           folderUrl: p.folderUrl || "",
           status: PROJECT_STATUSES.includes(p.status) ? p.status : (p.status ? migrateLegacyStatus(p.status).status : "Not Started"),
           phase: PROJECT_PHASES.includes(p.phase) ? p.phase : (p.status ? migrateLegacyStatus(p.status).phase : "Scoping"),
+          dueDateApproverId: p.dueDateApproverId || p.ownerId || "",
         });
       }
     });
@@ -91,6 +92,7 @@ export default function ProjectEditPage() {
       description: (form.description || "").trim(),
       ownerId: newOwner,
       approverId: newApprover,
+      dueDateApproverId: form.dueDateApproverId || form.ownerId || null,
       priority: form.priority,
       trainingType: form.trainingType || null,
       deliveryFormat: form.deliveryFormat || null,
@@ -152,10 +154,25 @@ export default function ProjectEditPage() {
               {users.filter(u => u.role !== "Exec Viewer").map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </Field>
-          <Field label="Approver">
+          <Field label="Baseline Approver (Supervisor / Manager / Director)">
             <select value={form.approverId} onChange={f("approverId")} className={inputCls}>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <option value="">— Select Baseline Approver —</option>
+              {users
+                .filter(u => u.id !== form.ownerId && /supervisor|manager|director/i.test(u.jobTitle || ""))
+                .map(u => <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}</option>)
+              }
             </select>
+            <p className="text-[11px] text-gray-400 mt-1">Must be Supervisor, Manager, or Director. Different from Project Lead.</p>
+          </Field>
+          <Field label="Due Date Change Approver">
+            <select value={form.dueDateApproverId} onChange={f("dueDateApproverId")} className={inputCls}>
+              <option value="">— Same as Project Owner —</option>
+              {users
+                .filter(u => /supervisor|manager|director/i.test(u.jobTitle || "") || u.id === form.ownerId)
+                .map(u => <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}</option>)
+              }
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">Approves task deadline change requests. Defaults to project owner.</p>
           </Field>
           <Field label="SME Name" optional>
             <input type="text" placeholder="Subject Matter Expert…" value={form.smeName} onChange={f("smeName")} className={inputCls} />

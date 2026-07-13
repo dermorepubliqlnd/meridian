@@ -307,6 +307,15 @@ function StatCard({ label, value, sub }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+const PLANNING_STATUS_TOOLTIPS = {
+  "Draft / Intake":   "New project — add WBS tasks with estimated hours and required roles to progress.",
+  "WBS Pending":      "All tasks have hours and roles assigned. Ready for resource planning.",
+  "Resource Check":   "Resources assigned — proceed to capacity check and then baseline.",
+  "Pending Approval": "Baseline submitted and awaiting approver sign-off.",
+  "Approved":         "Baseline approved. Project is ready to go Active.",
+  "Active":           "Project is running. Track progress and manage task statuses.",
+};
+
 export default function ProjectWBSPage() {
   const { id } = useParams();
   const [jobTitles] = useSettingsList("jobTitles", ["Content Developer", "Instructional Designer", "L&D Director", "L&D Supervisor", "Trainer"]);
@@ -475,6 +484,10 @@ export default function ProjectWBSPage() {
 
   const saveTaskField = useCallback(
     async (taskId, fields) => {
+      if (fields.status === "Done" && project?.ownerId && user?.uid !== project.ownerId) {
+        showToast("Only the Project Owner can mark tasks as Done.");
+        return;
+      }
       markSaving(taskId);
       try {
         await updateDoc(doc(db, "projects", id, "tasks", taskId), fields);
@@ -485,7 +498,7 @@ export default function ProjectWBSPage() {
         clearSaving(taskId);
       }
     },
-    [id, markSaving, clearSaving, showToast]
+    [id, project, user, markSaving, clearSaving, showToast]
   );
 
   const planningCheckPending = useRef(false);
@@ -648,10 +661,26 @@ export default function ProjectWBSPage() {
               <p className="text-[13px] text-gray-500">
                 Assign estimated hours and required roles to each WBS task. Role demand will be calculated automatically.
               </p>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                {savingIds.size > 0 ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" />
+                    <span className="text-amber-600">Saving…</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-teal-500">✓</span>
+                    <span className="text-gray-400">All changes saved</span>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
               {project.planningStatus && (
-                <span className={`text-[12px] font-medium px-3 py-1 rounded-full ${planningPillClass}`}>
+                <span
+                  className={`text-[12px] font-medium px-3 py-1 rounded-full cursor-default ${planningPillClass}`}
+                  title={PLANNING_STATUS_TOOLTIPS[project.planningStatus] || project.planningStatus}
+                >
                   {project.planningStatus}
                 </span>
               )}
