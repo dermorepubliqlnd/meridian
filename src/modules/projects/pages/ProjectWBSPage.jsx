@@ -19,7 +19,6 @@ import { computeRollups } from "../../../lib/completion";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Role options are built dynamically from Admin Settings jobTitles + fixed extras
 const FIXED_ROLE_EXTRAS = ["SME"];
 
 const PLANNING_STATUS_COLORS = {
@@ -140,11 +139,10 @@ function RoleSelect({ value, onChange, roleOptions = [] }) {
   }, []);
 
   function handleOpen() {
-    // Check if dropdown would be clipped at the bottom; if so, open upward
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUpward(spaceBelow < 220); // dropdown is ~200px tall
+      setOpenUpward(spaceBelow < 220);
     }
     setOpen((o) => !o);
   }
@@ -184,6 +182,117 @@ function RoleSelect({ value, onChange, roleOptions = [] }) {
   );
 }
 
+// ─── Assignee select ──────────────────────────────────────────────────────────
+
+function AssigneeSelect({ value, responsibleRole, assignmentsByRole, allUsers, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const ref = useRef(null);
+  const btnRef = useRef(null);
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // roleDocId mirrors how ProjectResourceAssignmentPage stores assignment docs
+  const roleDocId = responsibleRole ? responsibleRole.replace(/\s+/g, "_") : null;
+  const roleAssignment = roleDocId ? assignmentsByRole[roleDocId] : null;
+
+  // Support both legacy { userId } and current { assignees: [{slotId, userId}] } formats
+  let assignedUserIds = [];
+  if (roleAssignment) {
+    if (Array.isArray(roleAssignment.assignees) && roleAssignment.assignees.length > 0) {
+      assignedUserIds = roleAssignment.assignees.map((a) => a.userId).filter(Boolean);
+    } else if (roleAssignment.userId) {
+      assignedUserIds = [roleAssignment.userId];
+    }
+  }
+
+  const isSme = responsibleRole === "SME";
+  const smeName = roleAssignment?.smeName || "";
+  const assignedUsers = allUsers.filter((u) => assignedUserIds.includes(u.id));
+  const selectedUser = allUsers.find((u) => u.id === value);
+
+  function handleOpen() {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpward(spaceBelow < 180);
+    }
+    setOpen((o) => !o);
+  }
+
+  if (!responsibleRole) {
+    return <span className="text-[11px] text-gray-300 italic">Set role first</span>;
+  }
+
+  if (isSme) {
+    return (
+      <span className="text-[11px] text-gray-500 italic">
+        {smeName || <span className="text-gray-300">No SME assigned</span>}
+      </span>
+    );
+  }
+
+  if (assignedUsers.length === 0) {
+    return <span className="text-[11px] text-gray-300 italic">No one assigned</span>;
+  }
+
+  const pillClass = selectedUser
+    ? "bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] rounded-full px-2.5 py-0.5 cursor-pointer whitespace-nowrap inline-flex items-center gap-1"
+    : "border border-dashed border-gray-300 text-gray-400 text-[11px] rounded-full px-2.5 py-0.5 cursor-pointer whitespace-nowrap";
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button ref={btnRef} type="button" onClick={handleOpen} className={pillClass}>
+        {selectedUser ? (
+          <>
+            <span className="w-4 h-4 rounded-full bg-indigo-200 text-indigo-700 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+              {(selectedUser.displayName || selectedUser.name || "?")[0].toUpperCase()}
+            </span>
+            {selectedUser.displayName || selectedUser.name}
+          </>
+        ) : (
+          "Assign person"
+        )}
+      </button>
+      {open && (
+        <div
+          className="absolute z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[180px] py-1 text-[12px]"
+          style={openUpward ? { bottom: "calc(100% + 4px)", left: 0 } : { top: "calc(100% + 4px)", left: 0 }}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-400 italic"
+            onClick={() => { onChange(null); setOpen(false); }}
+          >
+            Unassign
+          </button>
+          {assignedUsers.map((u) => {
+            const name = u.displayName || u.name || u.email || u.id;
+            return (
+              <button
+                key={u.id}
+                className={`w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 ${value === u.id ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-700"}`}
+                onClick={() => { onChange(u.id); setOpen(false); }}
+              >
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  {name[0].toUpperCase()}
+                </span>
+                <div>
+                  <div>{name}</div>
+                  {u.jobTitle && <div className="text-[10px] text-gray-400">{u.jobTitle}</div>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, sub }) {
@@ -204,8 +313,10 @@ export default function ProjectWBSPage() {
   const roleOptions = [...new Set([...jobTitles, ...FIXED_ROLE_EXTRAS])].sort();
   const { user } = useAuth();
 
-  const [project, setProject] = useState(undefined); // undefined = loading, null = not found
+  const [project, setProject] = useState(undefined);
   const [tasks, setTasks] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [assignmentsByRole, setAssignmentsByRole] = useState({});
   const [toast, setToast] = useState(null);
   const [savingIds, setSavingIds] = useState(new Set());
   const [tpsEstimates, setTpsEstimates] = useState({});
@@ -227,6 +338,25 @@ export default function ProjectWBSPage() {
     const q = query(collection(db, "projects", id, "tasks"), orderBy("order", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [id]);
+
+  // All users — for name lookup in AssigneeSelect
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+      setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+
+  // Role→person assignments for this project
+  useEffect(() => {
+    if (!id) return;
+    const unsub = onSnapshot(collection(db, "projects", id, "assignments"), (snap) => {
+      const map = {};
+      snap.docs.forEach((d) => { map[d.id] = { id: d.id, ...d.data() }; });
+      setAssignmentsByRole(map);
     });
     return unsub;
   }, [id]);
@@ -285,12 +415,13 @@ export default function ProjectWBSPage() {
   const showToast = useCallback((msg) => setToast(msg), []);
 
   // ── TPS phase estimates ────────────────────────────────────────────────────
+
   useEffect(() => {
     if (project?.tpsEstimates && Object.keys(project.tpsEstimates).length > 0) {
       setTpsEstimates(project.tpsEstimates);
       setTpsOpen(false);
     } else if (project) {
-      setTpsOpen(true); // auto-open if not yet filled
+      setTpsOpen(true);
     }
   }, [project]);
 
@@ -306,7 +437,6 @@ export default function ProjectWBSPage() {
   }
 
   function getTpsForPhase(phase) {
-    // Normalize phase name → match TPS estimate key
     const key = phase.toLowerCase().replace(/[^a-z]/g, "");
     return tpsEstimates[key] > 0 ? tpsEstimates[key] : null;
   }
@@ -333,7 +463,6 @@ export default function ProjectWBSPage() {
           console.error("planningStatus update failed", e);
         }
       } else if (!allFilled && currentProject.planningStatus === "WBS Pending") {
-        // Regression: hours or role removed — roll back to Draft / Intake
         try {
           await updateDoc(doc(db, "projects", id), { planningStatus: "Draft / Intake" });
         } catch (e) {
@@ -359,7 +488,6 @@ export default function ProjectWBSPage() {
     [id, markSaving, clearSaving, showToast]
   );
 
-  // After any task update, re-evaluate planning status (debounced)
   const planningCheckPending = useRef(false);
   useEffect(() => {
     if (!tasks || !project || planningCheckPending.current) return;
@@ -382,6 +510,7 @@ export default function ProjectWBSPage() {
         phase,
         notes: "",
         responsibleRole: "",
+        assigneeId: null,
         estimatedHours: null,
         actualHours: null,
         status: "Not Started",
@@ -409,6 +538,7 @@ export default function ProjectWBSPage() {
         phase: parentTask.phase || "General",
         notes: "",
         responsibleRole: "",
+        assigneeId: null,
         estimatedHours: null,
         actualHours: null,
         status: "Not Started",
@@ -568,7 +698,6 @@ export default function ProjectWBSPage() {
               <p className="text-[11px] text-gray-400 mb-4">
                 Enter your TPS-scoped hour estimates per phase. These appear as targets on each phase header in the WBS below, so you can track alignment as you build out the task list.
               </p>
-              {/* Research is always first — universal prep phase */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                 {(["Research", ...phases]).map((label) => {
                   const key = label.toLowerCase().replace(/[^a-z]/g, "");
@@ -625,6 +754,7 @@ export default function ProjectWBSPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide">Task / Activity</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-24">Est. Hours</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-44">Required Role</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide w-44">Assigned To</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wide">Notes</th>
                 <th className="w-10 px-2 py-3" />
               </tr>
@@ -632,7 +762,7 @@ export default function ProjectWBSPage() {
             <tbody>
               {phases.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400 text-[13px]">
+                  <td colSpan={7} className="text-center py-12 text-gray-400 text-[13px]">
                     No tasks yet. Click <span className="font-semibold text-teal-600">+ Add Task</span> to get started.
                   </td>
                 </tr>
@@ -647,7 +777,7 @@ export default function ProjectWBSPage() {
                 return [
                   /* Phase group header */
                   <tr key={`phase-${phase}`} className="bg-slate-50 border-b border-gray-100" style={{ borderLeft: "4px solid #14B8A6" }}>
-                    <td colSpan={5} className="px-4 py-2">
+                    <td colSpan={6} className="px-4 py-2">
                       <span className="font-semibold text-gray-700 text-[12px] uppercase tracking-wide">
                         {phase}
                       </span>
@@ -659,9 +789,7 @@ export default function ProjectWBSPage() {
                         return (
                           <div className="flex items-center justify-end gap-2">
                             {tpsTarget !== null && (
-                              <span className="text-[10px] text-gray-400">
-                                TPS: {tpsTarget}h
-                              </span>
+                              <span className="text-[10px] text-gray-400">TPS: {tpsTarget}h</span>
                             )}
                             <span className="text-[11px] text-gray-500 font-medium">
                               {phTotal > 0 ? `${phTotal}h` : "—"}
@@ -724,8 +852,17 @@ export default function ProjectWBSPage() {
                         <td className="px-4 py-2.5">
                           <RoleSelect
                             value={task.responsibleRole || ""}
-                            onChange={(v) => saveTaskField(task.id, { responsibleRole: v })}
+                            onChange={(v) => saveTaskField(task.id, { responsibleRole: v, assigneeId: null })}
                             roleOptions={roleOptions}
+                          />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <AssigneeSelect
+                            value={task.assigneeId || null}
+                            responsibleRole={task.responsibleRole || ""}
+                            assignmentsByRole={assignmentsByRole}
+                            allUsers={users}
+                            onChange={(v) => saveTaskField(task.id, { assigneeId: v })}
                           />
                         </td>
                         <td className="px-4 py-2.5 text-gray-500 max-w-[180px]">
@@ -776,8 +913,17 @@ export default function ProjectWBSPage() {
                           <td className="px-4 py-2">
                             <RoleSelect
                               value={sub.responsibleRole || ""}
-                              onChange={(v) => saveTaskField(sub.id, { responsibleRole: v })}
+                              onChange={(v) => saveTaskField(sub.id, { responsibleRole: v, assigneeId: null })}
                               roleOptions={roleOptions}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <AssigneeSelect
+                              value={sub.assigneeId || null}
+                              responsibleRole={sub.responsibleRole || ""}
+                              assignmentsByRole={assignmentsByRole}
+                              allUsers={users}
+                              onChange={(v) => saveTaskField(sub.id, { assigneeId: v })}
                             />
                           </td>
                           <td className="px-4 py-2 text-gray-400 max-w-[180px]">
@@ -807,7 +953,7 @@ export default function ProjectWBSPage() {
 
                   /* Add task row for this phase */
                   <tr key={`add-${phase}`} className="border-b border-gray-100">
-                    <td colSpan={6} className="px-4 py-2">
+                    <td colSpan={7} className="px-4 py-2">
                       <button
                         onClick={() => addTask(phase)}
                         className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-teal-600 transition-colors"
@@ -884,7 +1030,6 @@ export default function ProjectWBSPage() {
         </div>
       </div>
 
-      {/* Toast */}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </div>
   );
