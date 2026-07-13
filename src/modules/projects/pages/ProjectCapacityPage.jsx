@@ -336,11 +336,11 @@ export default function ProjectCapacityPage() {
   const summaryStats = useMemo(() => {
     const overallocated = personCapacity.filter((p) => p.gap < 0).length;
     const limited = personCapacity.filter((p) => p.gap >= 0 && p.gap <= 5).length;
-    const totalNeeded = personCapacity.reduce((s, p) => s + p.hoursNeeded, 0);
+    const totalNeeded = topLevelTasks.reduce((s, t) => s + (t.estimatedHours || 0), 0);
     const totalAvailable = personCapacity.reduce((s, p) => s + p.availableHrs, 0);
     const capacityGap = totalAvailable - totalNeeded;
     return { overallocated, limited, totalNeeded, totalAvailable, capacityGap };
-  }, [personCapacity]);
+  }, [personCapacity, topLevelTasks]);
 
   // Top 3 risks (most overallocated first)
   const topRisks = useMemo(() => {
