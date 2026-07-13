@@ -183,6 +183,8 @@ function TimelineBar({ startDate, effortEndDate, forecastEndDate, targetDate }) 
 
 export default function ProjectCapacityPage() {
   const { id } = useParams();
+  const { profile } = useAuth();
+  const locked = project?.planningStatus === "Pending Approval";
 
   // All state declared before any early returns
   const [project, setProject] = useState(undefined);
@@ -425,6 +427,7 @@ export default function ProjectCapacityPage() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   async function handleMarkCapacityChecked() {
+    if (locked) return; // capacity locked during Pending Approval
     if (!project || markingChecked) return;
     setMarkingChecked(true);
     try {

@@ -320,7 +320,9 @@ export default function ProjectWBSPage() {
   const { id } = useParams();
   const [jobTitles] = useSettingsList("jobTitles", ["Content Developer", "Instructional Designer", "L&D Director", "L&D Supervisor", "Trainer"]);
   const roleOptions = [...new Set([...jobTitles, ...FIXED_ROLE_EXTRAS])].sort();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+
+  const locked = (project?.planningStatus === "Pending Approval");
 
   const [project, setProject] = useState(undefined);
   const [tasks, setTasks] = useState(null);
@@ -484,6 +486,7 @@ export default function ProjectWBSPage() {
 
   const saveTaskField = useCallback(
     async (taskId, fields) => {
+      if (locked) return;
       if (fields.status === "Done" && project?.ownerId && user?.uid !== project.ownerId) {
         showToast("Only the Project Owner can mark tasks as Done.");
         return;
@@ -513,6 +516,7 @@ export default function ProjectWBSPage() {
   }, [tasks, project, topLevelTasks, checkPlanningStatus]);
 
   async function addTask(phase) {
+    if (locked) return;
     const phaseTasks = topLevelTasks.filter((t) => (t.phase || "General") === phase);
     const maxOrder = phaseTasks.length > 0
       ? Math.max(...phaseTasks.map((t) => t.order ?? 0))
@@ -574,6 +578,7 @@ export default function ProjectWBSPage() {
   }
 
   async function deleteTask(task) {
+    if (locked) return;
     const label = task.name || "this task";
     const subs = subtaskMap[task.id] || [];
     const confirmMsg = subs.length > 0
@@ -634,6 +639,20 @@ export default function ProjectWBSPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <PlanningFlowNav project={project} projectId={id} />
+      {/* ── Pending Approval lock banner ──────────────────────────────── */}
+      {locked && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <p className="text-[12px] text-amber-700 font-medium">
+              This project is pending baseline approval — all planning is locked until the approver acts.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
         {/* WBS helper banner */}
@@ -684,6 +703,7 @@ export default function ProjectWBSPage() {
                   {project.planningStatus}
                 </span>
               )}
+              {!locked && (
               <button
                 onClick={addGlobalTask}
                 className="inline-flex items-center gap-1.5 bg-teal-500 hover:bg-teal-600 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
@@ -693,6 +713,7 @@ export default function ProjectWBSPage() {
                 </svg>
                 Add Task
               </button>
+              )}
             </div>
           </div>
         </div>

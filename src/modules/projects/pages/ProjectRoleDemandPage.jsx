@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
 import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
@@ -481,6 +482,7 @@ const WINDOW_OPTIONS = [
 export default function ProjectRoleDemandPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { profile } = useAuth();
 
   const advanceToCapacityCheck = async () => {
     if (!project) return;
@@ -683,6 +685,7 @@ export default function ProjectRoleDemandPage() {
   });
 
   const assignUserToRole = async (role, userId, allocationPct = 25) => {
+    if (locked) return;
     const docId = role.replace(/\s+/g, "_");
     const ref = doc(db, "projects", id, "assignments", docId);
     const existing = assignmentsThisProject[docId];
@@ -701,6 +704,7 @@ export default function ProjectRoleDemandPage() {
   };
 
   const removeUserFromRole = async (role, userId) => {
+    if (locked) return;
     const docId = role.replace(/\s+/g, "_");
     const ref = doc(db, "projects", id, "assignments", docId);
     const existing = assignmentsThisProject[docId];
@@ -721,6 +725,7 @@ export default function ProjectRoleDemandPage() {
   }, [tasks]);
 
   const syncAllocationsFromWBS = async () => {
+    if (locked) return;
     const updates = [];
     Object.entries(assignmentsThisProject).forEach(([docId, assignment]) => {
       const slots = assignment.assignees ?? [];
@@ -757,6 +762,20 @@ export default function ProjectRoleDemandPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <PlanningFlowNav project={project} projectId={id} />
+      {/* ── Pending Approval lock banner ──────────────────────────────── */}
+      {locked && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <p className="text-[12px] text-amber-700 font-medium">
+              This project is pending baseline approval — all planning is locked until the approver acts.
+            </p>
+          </div>
+        </div>
+      )}
+
 
       <div className="px-6 py-5 max-w-7xl mx-auto space-y-5">
 
@@ -988,7 +1007,7 @@ export default function ProjectRoleDemandPage() {
         </div>
 
         {/* Sync from WBS button */}
-        {hasRoles && Object.keys(wbsHoursByUser).length > 0 && (
+        {hasRoles && Object.keys(wbsHoursByUser).length > 0 && !locked && (
           <div className="flex justify-end">
             <button
               onClick={syncAllocationsFromWBS}
