@@ -924,13 +924,13 @@ export default function ProjectCapacityPage() {
               icon="👥"
               title="Add Resource"
               description="Increase capacity"
-              to={`/projects/${id}/resource-assignment`}
+              to={`/projects/${id}/role-demand`}
             />
             <ActionCard
               icon="⇄"
               title="Reassign Work"
               description="Balance workload"
-              to={`/projects/${id}/resource-assignment`}
+              to={`/projects/${id}/role-demand`}
             />
             <ActionCard
               icon="✂️"
@@ -950,14 +950,7 @@ export default function ProjectCapacityPage() {
 
       {/* ── Bottom action bar ──────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 pb-8">
-        <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
-          <Link
-            to={`/projects/${id}/resource-assignment`}
-            className="text-sm font-medium text-teal-600 hover:text-teal-700 flex items-center gap-1"
-          >
-            ← View Resource Assignment
-          </Link>
-
+        <div className="flex items-center justify-end bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
           <Link
             to={`/projects/${id}/baseline`}
             className="text-sm font-semibold text-white px-5 py-2.5 rounded-lg transition hover:opacity-90"
