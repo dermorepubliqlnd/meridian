@@ -125,7 +125,7 @@ function UtilBar({ used, total }) {
 
 const PCT_PRESETS = [10, 25, 50, 75, 100];
 
-function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks, assignmentsThisProject, onAssign, onRemove }) {
+function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks, assignmentsThisProject, onAssign, onRemove, projectOwnerId }) {
   const [open, setOpen] = useState(true);
   // pendingAssign: { role, userId } — which card is showing the allocation panel
   const [pendingAssign, setPendingAssign] = useState(null);
@@ -160,7 +160,7 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
 
       {open && (
         <div className="border-t border-gray-100 divide-y divide-gray-100">
-          {roleDemand.map(({ role, isSME }) => {
+          {roleDemand.map(({ role, isSME, needed: roleNeeded }) => {
             const matched = matchUsersToRole(users, role);
             return (
               <div key={role} className="px-5 py-4">
@@ -195,6 +195,14 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                       const isAssigned = !!assignedSlot;
                       const isPending  = pendingAssign?.role === role && pendingAssign?.userId === u.id;
 
+                      // Smart recommendation: % needed to cover this role's WBS demand
+                      const rawRecommendedPct = totalCap > 0
+                        ? Math.min(100, Math.ceil(((roleNeeded ?? 0) / totalCap) * 100 / 5) * 5)
+                        : 25;
+                      const recommendedPct = Math.max(10, rawRecommendedPct);
+                      const recommendedHrs = Math.round((recommendedPct / 100) * totalCap * 10) / 10;
+                      const coveragePct    = totalCap > 0 ? Math.round((recommendedHrs / (roleNeeded || 1)) * 100) : 0;
+
                       // hrs this person would commit to this project at pendingPct
                       const previewHrs = Math.round((pendingPct / 100) * (totalCap / planningWeeks) * planningWeeks * 10) / 10;
                       const wouldOverload = previewHrs > available;
@@ -216,7 +224,14 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                               {(u.name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-[12px] font-semibold text-[#0F2240] truncate">{u.name ?? "-"}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[12px] font-semibold text-[#0F2240] truncate">{u.name ?? "-"}</p>
+                                {u.id === projectOwnerId && (
+                                  <span className="flex-shrink-0 text-[9px] font-bold bg-navy text-white px-1.5 py-0.5 rounded-full leading-none" title="Project Owner">
+                                    Owner
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[10px] text-gray-400 truncate">{u.jobTitle ?? "-"}</p>
                             </div>
                             <span className={`text-[9px] border rounded-full px-1.5 py-0.5 font-semibold flex-shrink-0 ${sCls}`}>
@@ -314,14 +329,51 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                                 </div>
                               </div>
 
+                              {/* Smart recommendation banner */}
+                              {pendingPct !== recommendedPct && (
+                                <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-md px-2.5 py-1.5">
+                                  <svg className="w-3 h-3 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.052a.5.5 0 00-.384.384l-.349 2.09A1 1 0 0114.06 20H9.94a1 1 0 01-.984-.844l-.35-2.09a.5.5 0 00-.382-.383l-.348-.052z"/>
+                                  </svg>
+                                  <span className="text-[10px] text-indigo-700">
+                                    <strong>Suggested: {recommendedPct}%</strong> — covers {(roleNeeded ?? 0)} hrs WBS demand
+                                    ({coveragePct}% coverage).{" "}
+                                    <button
+                                      onClick={() => setPendingPct(recommendedPct)}
+                                      className="underline font-semibold hover:text-indigo-900"
+                                    >
+                                      Apply
+                                    </button>
+                                  </span>
+                                </div>
+                              )}
+                              {pendingPct === recommendedPct && (
+                                <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-md px-2.5 py-1.5">
+                                  <svg className="w-3 h-3 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                                  </svg>
+                                  <span className="text-[10px] text-indigo-700">
+                                    <strong>Recommended %</strong> — this covers the full {(roleNeeded ?? 0)} hrs WBS demand for this role.
+                                  </span>
+                                </div>
+                              )}
+
                               {/* Hours preview */}
-                              <div className={`flex items-center justify-between rounded-md px-2.5 py-1.5 text-[11px] ${wouldOverload ? "bg-red-50 border border-red-200" : "bg-teal-50 border border-teal-100"}`}>
+                              <div
+                                className={`flex items-center justify-between rounded-md px-2.5 py-1.5 text-[11px] ${wouldOverload ? "bg-red-50 border border-red-200" : "bg-teal-50 border border-teal-100"}`}
+                                title={`${pendingPct}% of ${u.name}'s ${fmt(totalCap / planningWeeks)}h/wk capacity over ${planningWeeks} weeks = ${previewHrs} hrs for this project. Role WBS demand: ${roleNeeded ?? 0} hrs.`}
+                              >
                                 <span className={wouldOverload ? "text-red-700 font-semibold" : "text-teal-700 font-semibold"}>
                                   ≈ {previewHrs} hrs committed to this project
                                 </span>
-                                {wouldOverload && (
-                                  <span className="text-red-500">⚠ exceeds free capacity</span>
-                                )}
+                                <span className="text-[10px]">
+                                  {wouldOverload
+                                    ? <span className="text-red-500">⚠ exceeds free capacity</span>
+                                    : previewHrs >= (roleNeeded ?? 0)
+                                    ? <span className="text-teal-500">✓ covers WBS demand</span>
+                                    : <span className="text-amber-500">{fmt((roleNeeded ?? 0) - previewHrs)} hrs short of demand</span>
+                                  }
+                                </span>
                               </div>
 
                               {/* Confirm / Cancel */}
@@ -849,6 +901,7 @@ export default function ProjectRoleDemandPage() {
             assignmentsThisProject={assignmentsThisProject}
             onAssign={assignUserToRole}
             onRemove={removeUserFromRole}
+            projectOwnerId={project?.ownerId}
           />
         )}
       </div>
