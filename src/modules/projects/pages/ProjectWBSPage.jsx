@@ -748,7 +748,7 @@ export default function ProjectWBSPage() {
 
         {/* WBS helper banner */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[12px] text-blue-800">
-          <strong>WBS (Work Breakdown Structure)</strong> — List every task this project needs, estimate the hours, and assign the responsible role. This feeds the Role Demand and Capacity calculations.
+          <strong>WBS (Work Breakdown Structure)</strong> — List every task this project needs, estimate the hours, and assign the responsible role. This feeds the Capacity Check calculations.
         </div>
 
         {/* Header card */}
@@ -1213,7 +1213,7 @@ export default function ProjectWBSPage() {
               to={`/projects/${id}/capacity`}
               className="inline-flex items-center gap-1.5 bg-teal-500 hover:bg-teal-600 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
             >
-              View Role Demand →
+              Proceed to Capacity Check →
             </Link>
           </div>
         </div>
