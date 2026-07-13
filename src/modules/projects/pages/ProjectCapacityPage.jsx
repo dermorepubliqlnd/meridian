@@ -901,7 +901,8 @@ export default function ProjectCapacityPage() {
         </div>
       </div>
 
-      {/* ── Recommended Actions ────────────────────────────────────────── */}
+      {/* ── Recommended Actions — only when actual constraints exist ── */}
+      {(summaryStats.overallocated > 0 || topRisks.length > 0) && (
       <div className="max-w-7xl mx-auto px-6 pb-6">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
           <h2 className="text-base font-bold" style={{ color: "#0F2240" }}>
@@ -947,6 +948,7 @@ export default function ProjectCapacityPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Bottom action bar ──────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 pb-8">
