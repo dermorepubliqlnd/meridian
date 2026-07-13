@@ -74,7 +74,7 @@ export default function NewProjectPage() {
     name: "", ticketNumber: "", description: "", source: "", requestorName: "", requestorDepartment: "",
     priority: "Medium", templateId: WBS_TEMPLATES[0].id, trainingType: "", developmentType: DEVELOPMENT_TYPES[0].value,
     deliveryFormat: "", startDate: "", targetLaunchDate: "", deadlineFlexibility: "Flexible",
-    deadlineDriver: "", ownerId: "", approverId: "", memberIds: [], folderUrl: "", smeName: "",
+    deadlineDriver: "", ownerId: "", approverId: "", dueDateApproverId: "", memberIds: [], folderUrl: "", smeName: "",
   });
 
   const [leapPhases,      setLeapPhases]      = useState({ Learn: true, Engage: false, Apply: false, Prove: false });
@@ -152,7 +152,7 @@ export default function NewProjectPage() {
         revisedDeadlineRejectionComment: null, actualCompletionDate: null,
         ownerId:    form.ownerId,
         approverId: form.approverId,
-        dueDateApproverId: form.ownerId,  // defaults to project owner; can be changed in project settings
+        dueDateApproverId: form.dueDateApproverId || form.ownerId,
         memberIds:  Array.from(new Set([...form.memberIds, form.ownerId, form.approverId])),
         folderUrl:  form.folderUrl  || null,
         smeName:    form.smeName    || null,
@@ -467,6 +467,25 @@ export default function NewProjectPage() {
                         The Approver cannot be the same person as the Project Lead.
                       </p>
                     )}
+                  </div>
+                  <div>
+                    <Label optional>Due Date Change Approver</Label>
+                    <select
+                      className={selectCls}
+                      value={form.dueDateApproverId}
+                      onChange={(e) => f("dueDateApproverId", e.target.value)}
+                    >
+                      <option value="">— Defaults to Project Lead —</option>
+                      {users
+                        .filter(u => /supervisor|manager|director/i.test(u.jobTitle || "") || u.id === form.ownerId)
+                        .map(u => (
+                          <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ""}</option>
+                        ))
+                      }
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Approves task deadline change requests. Defaults to the Project Lead — can be updated anytime in project settings.
+                    </p>
                   </div>
                   <div>
                     <Label optional>SME Name</Label>
