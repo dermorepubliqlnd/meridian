@@ -60,6 +60,7 @@ function TaskRow({
   today, expandedNotes, onToggleNote, onSaveNote, onOpenNote,
   onRequestDCR,
   executionMode,
+  membersByRole,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -296,6 +297,7 @@ function TaskRow({
             onSaveNote={onSaveNote}
             onOpenNote={onOpenNote}
             executionMode={executionMode}
+            membersByRole={membersByRole}
           />
         ))}
       {noteExpanded && (
@@ -1885,6 +1887,7 @@ export default function ProjectDetailPage() {
                         onOpenNote={(task) => setNotePanel({ taskId: task.id, taskName: task.name, note: task.notes || "" })}
                         onRequestDCR={(task) => { setDcrTask(task); setDcrRequestedDate(task.dueDate || ""); setDcrReason(""); setShowDCRModal(true); }}
                         executionMode={executionMode}
+                        membersByRole={membersByRole}
                       />
                     ))}
                 </Fragment>
