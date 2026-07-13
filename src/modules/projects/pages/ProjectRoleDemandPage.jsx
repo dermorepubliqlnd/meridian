@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import PlanningFlowNav from "../components/PlanningFlowNav";
 import {
   doc,
@@ -11,6 +11,7 @@ import {
   updateDoc,
   setDoc,
   getDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { userWeeklyProjectHours } from "../../../lib/bandwidth";
@@ -479,6 +480,19 @@ const WINDOW_OPTIONS = [
 
 export default function ProjectRoleDemandPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+
+  const advanceToCapacityCheck = async () => {
+    if (!project) return;
+    // Only advance if still in WBS Pending (idempotent)
+    if (project.planningStatus === "WBS Pending") {
+      await updateDoc(doc(db, "projects", id), {
+        planningStatus: "Resource Check",
+        updatedAt: serverTimestamp(),
+      });
+    }
+    navigate(`/projects/${id}/capacity`);
+  };
 
   const [project,        setProject]        = useState(null);
   const [tasks,          setTasks]          = useState([]);
@@ -963,12 +977,12 @@ export default function ProjectRoleDemandPage() {
                 </>
               )}
               <div className="flex-1" />
-              <Link
-                to={`/projects/${id}/capacity`}
+              <button
+                onClick={advanceToCapacityCheck}
                 className="inline-flex items-center gap-1.5 bg-[#0F2240] hover:bg-[#0F2240]/90 text-white text-[12px] font-semibold px-4 py-1.5 rounded-lg shadow-sm transition-colors whitespace-nowrap"
               >
                 Proceed to Capacity Check →
-              </Link>
+              </button>
             </div>
           )}
         </div>
