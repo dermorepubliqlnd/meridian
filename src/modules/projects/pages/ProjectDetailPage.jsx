@@ -59,6 +59,7 @@ function TaskRow({
   addingSubtaskFor, onCommitSubtask,
   today, expandedNotes, onToggleNote, onSaveNote, onOpenNote,
   onRequestDCR,
+  executionMode,
 }) {
   const selected = selectedIds.has(task.id);
   const children = childrenByParent[task.id] || [];
@@ -188,7 +189,8 @@ function TaskRow({
             <input
               type="number" min="0" step="0.5"
               defaultValue={task.actualHours || ""}
-              onBlur={(e) => onCommit(task, { actualHours: e.target.value ? Number(e.target.value) : null })}
+              onBlur={(e) => executionMode && onCommit(task, { actualHours: e.target.value ? Number(e.target.value) : null })}
+              disabled={!executionMode}
               placeholder="—"
               className="w-16 border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
             />
@@ -237,7 +239,8 @@ function TaskRow({
           <input
             type="date"
             defaultValue={task.actualCompletionDate || ""}
-            onChange={(e) => onCommit(task, { actualCompletionDate: e.target.value || null })}
+            onChange={(e) => executionMode && onCommit(task, { actualCompletionDate: e.target.value || null })}
+            disabled={!executionMode}
             className="border border-transparent hover:border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-transparent focus:bg-white focus:border-gray-300"
           />
         </td>
@@ -249,7 +252,8 @@ function TaskRow({
           ) : (
             <select
               value={task.status}
-              onChange={(e) => onCommit(task, { status: e.target.value })}
+              onChange={(e) => executionMode && onCommit(task, { status: e.target.value })}
+                          disabled={!executionMode}
               className={`appearance-none cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium border-none focus:outline-none focus:ring-2 focus:ring-teal ${STATUS_PILL_STYLES[task.status] || STATUS_PILL_STYLES["Not Started"]}`}
             >
               {STATUSES.map((s) => (
@@ -291,6 +295,7 @@ function TaskRow({
             onToggleNote={onToggleNote}
             onSaveNote={onSaveNote}
             onOpenNote={onOpenNote}
+            executionMode={executionMode}
           />
         ))}
       {noteExpanded && (
@@ -1716,32 +1721,19 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* ── Task list ── */}
-      {project.planningStatus !== "Active" && project.status !== "Active" && project.status !== "Done" && project.status !== "On Hold" ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-10 flex flex-col items-center justify-center text-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-              <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[13px] font-semibold text-gray-700 mb-1">Task tracker is locked</p>
-              <p className="text-[12px] text-gray-400 max-w-sm">
-                Complete the WBS and resource planning flow first. The task tracker unlocks once the baseline is approved and the project goes Active.
-              </p>
-            </div>
-            <Link
-              to={`/projects/${id}/wbs`}
-              className="mt-1 inline-flex items-center gap-1.5 text-[12px] font-semibold px-4 py-2 rounded-lg text-white transition hover:opacity-90"
-              style={{ backgroundColor: "#0F2240" }}
-            >
-              Go to WBS →
-            </Link>
-          </div>
-        </div>
-      ) : (
+      {/* ── Task list ── always visible; execution controls disabled until Active */}
+      {(() => {
+        const executionMode = project.status === "Active" || project.status === "Done" || project.status === "On Hold";
+        return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+        {!executionMode && (
+          <div className="bg-blue-50 border-b border-blue-100 px-5 py-2.5 flex items-center gap-2">
+            <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-[12px] text-blue-700">Planning mode — task list is read-only. Status tracking unlocks once the project goes Active.</span>
+          </div>
+        )}
         {/* ── DCR Approval Queue (visible only to dueDateApproverId) ── */}
         {dcrs.filter(d => d.status === "Pending").length > 0 && project.dueDateApproverId === user?.uid && (
           <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-3">
@@ -1892,6 +1884,7 @@ export default function ProjectDetailPage() {
                         onSaveNote={(task, val) => updateDoc(doc(db, "projects", id, "tasks", task.id), { notes: val.trim() || null })}
                         onOpenNote={(task) => setNotePanel({ taskId: task.id, taskName: task.name, note: task.notes || "" })}
                         onRequestDCR={(task) => { setDcrTask(task); setDcrRequestedDate(task.dueDate || ""); setDcrReason(""); setShowDCRModal(true); }}
+                        executionMode={executionMode}
                       />
                     ))}
                 </Fragment>
@@ -1903,7 +1896,8 @@ export default function ProjectDetailPage() {
           </tbody>
         </table>
       </div>
-      )}
+        );
+      })()}
 
       {/* ── Right-click context menu ── */}
       {contextMenu && (
