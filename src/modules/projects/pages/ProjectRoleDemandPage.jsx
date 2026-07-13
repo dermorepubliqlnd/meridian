@@ -125,16 +125,21 @@ function UtilBar({ used, total }) {
 
 const PCT_PRESETS = [10, 25, 50, 75, 100];
 
-function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks, assignmentsThisProject, onAssign, onRemove, projectOwnerId }) {
+function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUser, tentativeByUser, planningWeeks, assignmentsThisProject, onAssign, onRemove, projectOwnerId, wbsHoursByUser }) {
   const [open, setOpen] = useState(true);
   // pendingAssign: { role, userId } — which card is showing the allocation panel
   const [pendingAssign, setPendingAssign] = useState(null);
   const [pendingPct, setPendingPct] = useState(25);
 
   const openPanel = (role, userId, available, totalCap) => {
-    // Suggest a sensible default: whichever preset leaves them not overloaded
-    const weeklyHrs = totalCap / planningWeeks;
-    const defaultPct = PCT_PRESETS.find(p => (p / 100) * weeklyHrs * planningWeeks <= available) ?? 10;
+    const wbsHrs = wbsHoursByUser?.[userId] ?? 0;
+    let defaultPct;
+    if (wbsHrs > 0 && totalCap > 0) {
+      defaultPct = Math.min(100, Math.round((wbsHrs / totalCap) * 100));
+    } else {
+      const weeklyHrs = totalCap / planningWeeks;
+      defaultPct = PCT_PRESETS.find(p => (p / 100) * weeklyHrs * planningWeeks <= available) ?? 10;
+    }
     setPendingPct(defaultPct);
     setPendingAssign({ role, userId });
   };
@@ -276,22 +281,69 @@ function TeamMembersSection({ roleDemand, users, committedByUser, confirmedByUse
                             <span className="text-gray-400">{p}% used</span>
                           </div>
 
-                          {/* Already assigned: show current allocation */}
-                          {isAssigned && (
-                            <div className="flex items-center justify-between bg-teal-50 rounded-md px-2.5 py-1.5">
-                              <span className="text-[11px] text-teal-700 font-semibold">
-                                {assignedSlot.allocationPct ?? 20}% allocated to this project
-                              </span>
-                              <span className="text-[10px] text-teal-500">
-                                ≈ {Math.round((assignedSlot.allocationPct ?? 20) / 100 * (totalCap / planningWeeks) * planningWeeks * 10) / 10} hrs
-                              </span>
-                            </div>
-                          )}
+                          {/* Already assigned: show current allocation + WBS drift */}
+                          {isAssigned && (() => {
+                            const storedPct  = assignedSlot.allocationPct ?? 20;
+                            const wbsHrs     = wbsHoursByUser?.[u.id] ?? 0;
+                            const derivedPct = wbsHrs > 0 && totalCap > 0
+                              ? Math.min(100, Math.round((wbsHrs / totalCap) * 100))
+                              : null;
+                            const hasDrift   = derivedPct !== null && storedPct !== derivedPct;
+                            return (
+                              <>
+                                <div className={`flex items-center justify-between rounded-md px-2.5 py-1.5 ${hasDrift ? "bg-amber-50 border border-amber-200" : "bg-teal-50"}`}>
+                                  <span className={`text-[11px] font-semibold ${hasDrift ? "text-amber-700" : "text-teal-700"}`}>
+                                    {storedPct}% allocated to this project
+                                    {hasDrift && <span className="ml-1 text-[9px] font-normal">(WBS: {derivedPct}%)</span>}
+                                  </span>
+                                  <span className={`text-[10px] ${hasDrift ? "text-amber-500" : "text-teal-500"}`}>
+                                    ≈ {Math.round(storedPct / 100 * (totalCap / planningWeeks) * planningWeeks * 10) / 10} hrs
+                                  </span>
+                                </div>
+                                {hasDrift && (
+                                  <div className="text-[10px] text-amber-600 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                    </svg>
+                                    WBS tasks suggest {derivedPct}% — use "Sync from WBS" to update
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
 
                           {/* Allocation panel — shown when pending */}
                           {isPending && (
                             <div className="pt-1 border-t border-teal-100 space-y-2.5">
-                              <p className="text-[11px] font-semibold text-gray-700">% of capacity for this project</p>
+                              {(() => {
+                                const wbsHrs = wbsHoursByUser?.[u.id] ?? 0;
+                                const derivedPct = wbsHrs > 0 && totalCap > 0
+                                  ? Math.min(100, Math.round((wbsHrs / totalCap) * 100))
+                                  : null;
+                                return (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[11px] font-semibold text-gray-700">% of capacity for this project</p>
+                                      {wbsHrs > 0 && (
+                                        <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5">
+                                          WBS: {fmt(wbsHrs)} hrs assigned
+                                        </span>
+                                      )}
+                                    </div>
+                                    {derivedPct !== null && pendingPct !== derivedPct && (
+                                      <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                                        <svg className="w-3 h-3 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                        </svg>
+                                        <span className="text-[10px] text-amber-700">
+                                          WBS tasks suggest <strong>{derivedPct}%</strong>.{" "}
+                                          <button onClick={() => setPendingPct(derivedPct)} className="underline font-semibold hover:text-amber-900">Use WBS %</button>
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
 
                               {/* Quick-pick preset buttons */}
                               <div className="flex gap-1.5 flex-wrap">
@@ -643,6 +695,44 @@ export default function ProjectRoleDemandPage() {
     await updateDoc(ref, { assignees: slots });
   };
 
+  // ── WBS-derived allocation % ──────────────────────────────────────────────
+  const wbsHoursByUser = useMemo(() => {
+    const map = {};
+    tasks.forEach(t => {
+      if (t.assigneeId && Number(t.estimatedHours) > 0) {
+        map[t.assigneeId] = (map[t.assigneeId] ?? 0) + Number(t.estimatedHours);
+      }
+    });
+    return map;
+  }, [tasks]);
+
+  const syncAllocationsFromWBS = async () => {
+    const updates = [];
+    Object.entries(assignmentsThisProject).forEach(([docId, assignment]) => {
+      const slots = assignment.assignees ?? [];
+      const newSlots = slots.map(slot => {
+        const wbsHrs = wbsHoursByUser[slot.userId];
+        if (!wbsHrs) return slot;
+        const u = users.find(x => x.id === slot.userId);
+        const totalCap = u ? userWeeklyProjectHours(u) * (planningWeeks ?? 8) : 0;
+        if (totalCap <= 0) return slot;
+        const derivedPct = Math.min(100, Math.round((wbsHrs / totalCap) * 100));
+        return { ...slot, allocationPct: derivedPct, wbsDerived: true };
+      });
+      const changed = newSlots.some((s, i) => s.allocationPct !== slots[i].allocationPct);
+      if (changed) {
+        updates.push(updateDoc(doc(db, "projects", id, "assignments", docId), { assignees: newSlots }));
+      }
+    });
+    if (updates.length === 0) {
+      showToast("No WBS-assigned tasks found to sync.");
+      return;
+    }
+    await Promise.all(updates);
+    showToast(`Synced allocation % from WBS for ${updates.length} role(s).`);
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   function showToast(msg) {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
@@ -735,15 +825,9 @@ export default function ProjectRoleDemandPage() {
               <p className="text-[12px] text-indigo-800">
                 <span className="font-semibold">{rolesNeedingAssignment.length} role{rolesNeedingAssignment.length > 1 ? "s" : ""} still need people assigned:</span>{" "}
                 {rolesNeedingAssignment.map(r => r.role).join(", ")}.{" "}
-                Go to Resource Assignment to assign team members to these roles.
+                Use the Team Members section below to assign team members to these roles.
               </p>
             </div>
-            <Link
-              to={`/projects/${id}/resource-assignment`}
-              className="flex-shrink-0 inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-            >
-              Assign People →
-            </Link>
           </div>
         )}
 
@@ -880,14 +964,30 @@ export default function ProjectRoleDemandPage() {
               )}
               <div className="flex-1" />
               <Link
-                to={`/projects/${id}/resource-assignment`}
+                to={`/projects/${id}/capacity`}
                 className="inline-flex items-center gap-1.5 bg-[#0F2240] hover:bg-[#0F2240]/90 text-white text-[12px] font-semibold px-4 py-1.5 rounded-lg shadow-sm transition-colors whitespace-nowrap"
               >
-                Proceed to Resource Assignment
+                Proceed to Capacity Check →
               </Link>
             </div>
           )}
         </div>
+
+        {/* Sync from WBS button */}
+        {hasRoles && Object.keys(wbsHoursByUser).length > 0 && (
+          <div className="flex justify-end">
+            <button
+              onClick={syncAllocationsFromWBS}
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+              title="Auto-update all assignment allocations from WBS task hours"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Sync allocations from WBS
+            </button>
+          </div>
+        )}
 
         {/* Team Members by Role */}
         {hasRoles && (
@@ -902,6 +1002,7 @@ export default function ProjectRoleDemandPage() {
             onAssign={assignUserToRole}
             onRemove={removeUserFromRole}
             projectOwnerId={project?.ownerId}
+            wbsHoursByUser={wbsHoursByUser}
           />
         )}
       </div>
