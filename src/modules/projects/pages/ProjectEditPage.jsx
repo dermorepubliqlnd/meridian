@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  doc, onSnapshot, collection, updateDoc, addDoc, serverTimestamp,
+  doc, onSnapshot, collection, updateDoc, addDoc, serverTimestamp, arrayUnion,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuth } from "../../../context/AuthContext";
@@ -103,6 +103,8 @@ export default function ProjectEditPage() {
       folderUrl: (form.folderUrl || "").trim() || null,
       status: form.status,
       phase: form.phase,
+      // Always keep owner, approver, and dueDateApprover in memberIds
+      memberIds: arrayUnion(newOwner, newApprover, form.dueDateApproverId || newOwner),
     });
 
     const nameOf = (uid) => users.find((u) => u.id === uid)?.name || uid;

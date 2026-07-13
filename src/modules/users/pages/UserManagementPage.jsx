@@ -57,6 +57,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
     jobTitle:           user.jobTitle           || "",
     reportsTo:          user.reportsTo          || "",
     role:               user.role               || "Contributor",
+    projectScope:       user.projectScope       || "member",
     weeklyHours:        user.weeklyHours        ?? 37.5,
     projectCapacityPct: user.projectCapacityPct ?? 60,
   });
@@ -80,6 +81,7 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
       jobTitle:           edit.jobTitle,
       reportsTo:          edit.reportsTo || null,
       role:               edit.role,
+      projectScope:       edit.projectScope,
       weeklyHours:        Number(edit.weeklyHours),
       projectCapacityPct: Number(edit.projectCapacityPct),
     });
@@ -132,6 +134,17 @@ function EditUserRow({ user, users, jobTitles, onCancel, onSaved }) {
           className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
         >
           {SYSTEM_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </td>
+      {/* Project Visibility */}
+      <td className="px-3 py-2">
+        <select
+          value={edit.projectScope}
+          onChange={(e) => setEdit({ ...edit, projectScope: e.target.value })}
+          className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
+        >
+          <option value="member">Own &amp; assigned only</option>
+          <option value="team">All team projects</option>
         </select>
       </td>
       {/* Capacity */}
@@ -222,6 +235,7 @@ export default function UserManagementPage() {
         reportsTo:          form.reportsTo || null,
         weeklyHours:        Number(form.weeklyHours),
         projectCapacityPct: Number(form.projectCapacityPct),
+        projectScope:       form.projectScope || "member",
         createdAt:          serverTimestamp(),
       });
       setStatus({
@@ -330,6 +344,20 @@ export default function UserManagementPage() {
               {SYSTEM_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Project Visibility</label>
+            <select
+              value={form.projectScope || "member"}
+              onChange={(e) => setForm({ ...form, projectScope: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
+            >
+              <option value="member">Own &amp; assigned projects only</option>
+              <option value="team">All team projects</option>
+            </select>
+            <p className="text-[10px] text-gray-400 mt-1">
+              "All team projects" lets this user see every project in Meridian, like a read-only admin view.
+            </p>
+          </div>
           {/* Live capacity preview */}
           {form.jobTitle && (
             <div className="bg-teal-50 border border-teal-100 rounded-md p-2.5 text-[11px] text-teal-700">
@@ -359,6 +387,7 @@ export default function UserManagementPage() {
                 <th className="px-3 py-2">Job Title</th>
                 <th className="px-3 py-2">Reports To</th>
                 <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2">Project View</th>
                 <th className="px-3 py-2">Project Capacity</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -393,6 +422,15 @@ export default function UserManagementPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                        u.projectScope === "team"
+                          ? "bg-indigo-100 text-indigo-700"
+                          : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {u.projectScope === "team" ? "All projects" : "Own & assigned"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
                       <CapacityBadge user={u} />
                     </td>
                     <td className="px-3 py-2">
@@ -418,7 +456,7 @@ export default function UserManagementPage() {
               )}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-400">No users yet.</td>
+                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">No users yet.</td>
                 </tr>
               )}
             </tbody>

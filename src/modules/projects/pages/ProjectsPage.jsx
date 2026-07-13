@@ -124,13 +124,7 @@ export default function ProjectsPage() {
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    const projRef = collection(db, "projects");
-    const q = profile?.role === "Admin"
-      ? projRef
-      : query(projRef, where("memberIds", "array-contains", user.uid));
-    const unsubProjects = onSnapshot(q, (snap) => {
-      setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+
     const unsubTasks = onSnapshot(collectionGroup(db, "tasks"), (snap) => {
       const grouped = {};
       snap.docs.forEach((d) => {
@@ -139,7 +133,28 @@ export default function ProjectsPage() {
       });
       setTasksByProject(grouped);
     });
-    return () => { unsubUsers(); unsubProjects(); unsubTasks(); };
+
+    const projRef = collection(db, "projects");
+    const isTeamViewer = profile?.role === "Admin" || profile?.projectScope === "team";
+
+    if (isTeamViewer) {
+      const unsubProjects = onSnapshot(projRef, (snap) => {
+        setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      });
+      return () => { unsubUsers(); unsubTasks(); unsubProjects(); };
+    }
+
+    // Default: own projects + assigned (two queries merged to handle stale memberIds)
+    const projectMap = new Map();
+    const merge = (snap) => {
+      snap.docs.forEach((d) => projectMap.set(d.id, { id: d.id, ...d.data() }));
+      setProjects([...projectMap.values()]);
+    };
+    const q1 = query(projRef, where("memberIds", "array-contains", user.uid));
+    const q2 = query(projRef, where("ownerId", "==", user.uid));
+    const unsubQ1 = onSnapshot(q1, merge);
+    const unsubQ2 = onSnapshot(q2, merge);
+    return () => { unsubUsers(); unsubTasks(); unsubQ1(); unsubQ2(); };
   }, [user, profile]);
 
   const nameFor = (uid) => users.find((u) => u.id === uid)?.name || "—";
