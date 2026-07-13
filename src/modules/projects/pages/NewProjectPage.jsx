@@ -169,7 +169,7 @@ export default function NewProjectPage() {
             const taskRef = doc(collection(db, "projects", projectRef.id, "tasks"));
             batch.set(taskRef, {
               parentTaskId: null, phase: phase.phase, name: task.name, notes: task.notes,
-              responsibleRole: task.role, assigneeId: null, estimatedHours: null, actualHours: null,
+              responsibleRole: "", assigneeId: null, estimatedHours: null, actualHours: null,
               startDate: null, startDateOverridden: false, dueDate: null, actualCompletionDate: null,
               status: "Not Started", blockedBy: [], order,
             });
