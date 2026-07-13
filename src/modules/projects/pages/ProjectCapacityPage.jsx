@@ -336,10 +336,11 @@ export default function ProjectCapacityPage() {
   const summaryStats = useMemo(() => {
     const overallocated = personCapacity.filter((p) => p.gap < 0).length;
     const limited = personCapacity.filter((p) => p.gap >= 0 && p.gap <= 5).length;
-    const totalNeeded = topLevelTasks.reduce((s, t) => s + (t.estimatedHours || 0), 0);
+    const wbsEffortHrs = topLevelTasks.reduce((s, t) => s + (Number(t.estimatedHours) || 0), 0);
+    const committedHrs  = personCapacity.reduce((s, p) => s + p.hoursNeeded, 0);
     const totalAvailable = personCapacity.reduce((s, p) => s + p.availableHrs, 0);
-    const capacityGap = totalAvailable - totalNeeded;
-    return { overallocated, limited, totalNeeded, totalAvailable, capacityGap };
+    const capacityGap = totalAvailable - wbsEffortHrs;
+    return { overallocated, limited, wbsEffortHrs, committedHrs, totalAvailable, capacityGap };
   }, [personCapacity, topLevelTasks]);
 
   // Top 3 risks (most overallocated first)
@@ -459,7 +460,7 @@ export default function ProjectCapacityPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const { overallocated, limited, totalNeeded, totalAvailable, capacityGap } = summaryStats;
+  const { overallocated, limited, wbsEffortHrs, committedHrs, totalAvailable, capacityGap } = summaryStats;
   const progressPct =
     totalAvailable > 0 ? Math.min(100, (totalNeeded / totalAvailable) * 100) : 0;
   const progressColor =
@@ -605,8 +606,12 @@ export default function ProjectCapacityPage() {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-500">Total Hours Needed</span>
-              <span className="font-bold text-gray-800">{totalNeeded.toFixed(1)} hrs</span>
+              <span className="text-gray-500">WBS Effort Required</span>
+              <span className="font-bold text-gray-800">{wbsEffortHrs.toFixed(1)} hrs</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-500" title="Sum of each person's allocation % × their capacity over the planning window">Total Committed Hours</span>
+              <span className="font-bold text-gray-800">{committedHrs.toFixed(1)} hrs</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-500" title="Combined project-hours available across all assigned team members over the planning window">Team Pool ({planningWeeks}wk)</span>
@@ -893,9 +898,9 @@ export default function ProjectCapacityPage() {
           </table>
           {personCapacity.length > 0 && (
             <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-500 flex gap-6">
-              <span>Total project demand: <strong className="text-gray-700">{totalNeeded.toFixed(1)}h</strong></span>
+              <span>Total project demand: <strong className="text-gray-700">{wbsEffortHrs.toFixed(1)}h</strong></span>
               <span>Combined pool ({planningWeeks}wk): <strong className="text-gray-700">{totalAvailable.toFixed(1)}h</strong></span>
-              <span>Avg pool utilization: <strong className={totalNeeded/totalAvailable > 0.9 ? "text-red-600" : totalNeeded/totalAvailable > 0.6 ? "text-amber-600" : "text-emerald-600"}>{Math.round((totalNeeded/totalAvailable)*100)}%</strong></span>
+              <span>Avg pool utilization: <strong className={wbsEffortHrs/totalAvailable > 0.9 ? "text-red-600" : wbsEffortHrs/totalAvailable > 0.6 ? "text-amber-600" : "text-emerald-600"}>{Math.round((wbsEffortHrs/totalAvailable)*100)}%</strong></span>
             </div>
           )}
         </div>
